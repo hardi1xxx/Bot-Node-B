@@ -6,13 +6,13 @@ import json
 from oauth2client.service_account import ServiceAccountCredentials
 
 # ==============================
-# CONFIG ENVIRONMENT
+# CONFIG
 # ==============================
 
 TOKEN = os.getenv("BOT_TOKEN")
 
 if not TOKEN:
-    raise ValueError("❌ BOT_TOKEN tidak ditemukan di Environment Variables Railway!")
+    raise ValueError("BOT_TOKEN tidak ditemukan di Environment Variables!")
 
 SPREADSHEET_ID = "124EjHM5jfcsLez2G0R2_ZSpD9He-IjawllH1N8BJXng"
 NAMA_SHEET = "Node B"
@@ -21,7 +21,7 @@ bot = telebot.TeleBot(TOKEN)
 
 
 # ==============================
-# FUNCTION: CONNECT GOOGLE SHEET
+# CONNECT GOOGLE SHEET
 # ==============================
 
 def get_sheet_data():
@@ -29,7 +29,7 @@ def get_sheet_data():
         credentials_raw = os.getenv("GOOGLE_CREDENTIALS")
 
         if not credentials_raw:
-            raise ValueError("❌ GOOGLE_CREDENTIALS tidak ditemukan di Environment Variables!")
+            raise ValueError("GOOGLE_CREDENTIALS tidak ditemukan!")
 
         scope = [
             "https://spreadsheets.google.com/feeds",
@@ -64,43 +64,40 @@ def get_sheet_data():
 
 
 # ==============================
-# START COMMAND
+# COMMAND START
 # ==============================
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     bot.reply_to(
         message,
-        "Halo! 👋\n\nSilakan masukkan Site ID yang ingin dicari."
+        "Halo 👋\n\nGunakan perintah:\n/cari SITEID"
     )
 
 
 # ==============================
-# SEARCH SITE ID
+# COMMAND CARI
 # ==============================
 
-@bot.message_handler(func=lambda message: True)
+@bot.message_handler(commands=['cari'])
 def search_site(message):
+    try:
+        site_id_cari = message.text.split(maxsplit=1)[1].strip()
+    except:
+        bot.reply_to(message, "Gunakan format:\n/cari SITEID")
+        return
 
-    site_id_cari = message.text.strip()
     df = get_sheet_data()
 
     if df is None:
-        bot.reply_to(
-            message,
-            "❌ Gagal mengambil data dari Google Sheet.\nCek konfigurasi Railway."
-        )
+        bot.reply_to(message, "❌ Gagal mengambil data dari Google Sheet.")
         return
 
     try:
-        # Cari di kolom ke-5 (index 4)
         result = df[df.iloc[:, 4].astype(str).str.strip().str.upper() == site_id_cari.upper()]
 
         if result.empty:
-            bot.reply_to(
-                message,
-                f"❌ Site ID '{site_id_cari}' tidak ditemukan."
-            )
+            bot.reply_to(message, f"❌ Site ID '{site_id_cari}' tidak ditemukan.")
             return
 
         row = result.iloc[0]
