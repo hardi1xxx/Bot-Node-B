@@ -6,7 +6,7 @@ import json
 from oauth2client.service_account import ServiceAccountCredentials
 
 # --- KONFIGURASI ---
-TOKEN = os.getenv("8752926914:AAF7_o9c-fvl2HZ0FOoVolxGr3sggKH3Iog")
+TOKEN = os.getenv("BOT_TOKEN")
 SPREADSHEET_ID = "124EjHM5jfcsLez2G0R2_ZSpD9He-IjawllH1N8BJXng"
 NAMA_SHEET = "Node B"
 
