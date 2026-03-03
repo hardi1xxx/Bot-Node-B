@@ -95,4 +95,5 @@ def echo_message(message):
         print(f"Error Detail: {e}")
 
 print("Bot sedang berjalan...")
+bot.remove_webhook()
 bot.infinity_polling()
