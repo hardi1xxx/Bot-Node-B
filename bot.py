@@ -1,75 +1,88 @@
 import telebot
 import gspread
 import pandas as pd
+import os
+import json
+from oauth2client.service_account import ServiceAccountCredentials
 
-# --- KONFIGURASI BARU ---
-TOKEN = "8752926914:AAF7_o9c-fvl2HZ0FOoVolxGr3sggKH3Iog"
+# --- KONFIGURASI ---
+TOKEN = os.getenv("8752926914:AAF7_o9c-fvl2HZ0FOoVolxGr3sggKH3Iog")
 SPREADSHEET_ID = "124EjHM5jfcsLez2G0R2_ZSpD9He-IjawllH1N8BJXng"
-NAMA_SHEET = "Node B"  # Nama Sheet yang baru
+NAMA_SHEET = "Node B"
 
 # Inisialisasi Bot
 bot = telebot.TeleBot(TOKEN)
 
-# Fungsi untuk koneksi ke Google Sheet (Tanpa Credentials karena Public)
+# Fungsi koneksi ke Google Sheet (pakai ENV Railway)
 def get_sheet_data():
     try:
-        # Pakai Service Account
-        client = gspread.service_account(filename="service_account.json")
-        
-        # Buka spreadsheet
+        scope = [
+            "https://spreadsheets.google.com/feeds",
+            "https://www.googleapis.com/auth/drive"
+        ]
+
+        creds_dict = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
+
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(
+            creds_dict, scope)
+
+        client = gspread.authorize(creds)
+
         sheet = client.open_by_key(SPREADSHEET_ID).worksheet(NAMA_SHEET)
-        
+
         data = sheet.get_all_values()
-        
+
         if not data:
             return None
-            
+
         df = pd.DataFrame(data)
-        
+
         headers = df.iloc[0]
         df = df[1:]
         df.columns = headers
-        
+
         return df
-        
+
     except Exception as e:
         print(f"Error: {e}")
         return None
 
+
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, 
-        "Halo! Saya Bot Info Site.\n\n" +
-        "Silakan masukkan Site ID yang ingin dicari."
+    bot.reply_to(
+        message,
+        "Halo! Saya Bot Info Site.\n\nSilakan masukkan Site ID yang ingin dicari."
     )
+
 
 @bot.message_handler(func=lambda message: True)
 def echo_message(message):
     site_id_cari = message.text.strip()
-    
+
     df = get_sheet_data()
-    
+
     if df is None:
-        bot.reply_to(message, "❌ Gagal mengambil data dari Google Sheet.\n\nCoba cek:\n1. Apakah sheet 'Node B' benar?\n2. Apakah link sudah di Public?")
+        bot.reply_to(
+            message,
+            "❌ Gagal mengambil data dari Google Sheet.\n\nCek ENV GOOGLE_CREDENTIALS di Railway."
+        )
         return
-    
+
     try:
-        # Cari berdasarkan Site ID (Kolom E / Index 4)
         result = df[df.iloc[:, 4].astype(str).str.strip() == site_id_cari]
-        
+
         if result.empty:
             result = df[df.iloc[:, 4].astype(str).str.upper().str.strip() == site_id_cari.upper()]
-        
+
         if result.empty:
-            bot.reply_to(message, f"❌ Site ID '{site_id_cari}' tidak ditemukan.\n\nCoba cek lagi Site ID-nya.")
+            bot.reply_to(
+                message,
+                f"❌ Site ID '{site_id_cari}' tidak ditemukan."
+            )
         else:
             row = result.iloc[0]
-            
-            #CEK: Kita coba dulu index kolom yang benar
-            #Coba print(row) untuk debug
-            print(f"Data ditemukan: {row.iloc[4]}")
-            print(f"Jumlah kolom: {len(row)}")
-            
+
             response = f"""
 <b>📋 DATA SITE</b>
 ━━━━━━━━━━━━━━━
@@ -87,12 +100,13 @@ def echo_message(message):
 <b>New TA AREA :</b> {row.iloc[66]}
 <b>NEW INFRA / FIBERIZATION :</b> {row.iloc[100]}
             """
-            
+
             bot.reply_to(message, response, parse_mode='HTML')
-            
+
     except Exception as e:
         bot.reply_to(message, f"Error: {str(e)}")
         print(f"Error Detail: {e}")
+
 
 print("Bot sedang berjalan...")
 bot.remove_webhook()
