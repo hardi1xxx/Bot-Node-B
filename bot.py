@@ -5,23 +5,38 @@ import os
 import json
 from oauth2client.service_account import ServiceAccountCredentials
 
-# --- KONFIGURASI ---
+# ==============================
+# CONFIG ENVIRONMENT
+# ==============================
+
 TOKEN = os.getenv("BOT_TOKEN")
+
+if not TOKEN:
+    raise ValueError("❌ BOT_TOKEN tidak ditemukan di Environment Variables Railway!")
+
 SPREADSHEET_ID = "124EjHM5jfcsLez2G0R2_ZSpD9He-IjawllH1N8BJXng"
 NAMA_SHEET = "Node B"
 
-# Inisialisasi Bot
 bot = telebot.TeleBot(TOKEN)
 
-# Fungsi koneksi ke Google Sheet (pakai ENV Railway)
+
+# ==============================
+# FUNCTION: CONNECT GOOGLE SHEET
+# ==============================
+
 def get_sheet_data():
     try:
+        credentials_raw = os.getenv("GOOGLE_CREDENTIALS")
+
+        if not credentials_raw:
+            raise ValueError("❌ GOOGLE_CREDENTIALS tidak ditemukan di Environment Variables!")
+
         scope = [
             "https://spreadsheets.google.com/feeds",
             "https://www.googleapis.com/auth/drive"
         ]
 
-        creds_dict = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
+        creds_dict = json.loads(credentials_raw)
 
         creds = ServiceAccountCredentials.from_json_keyfile_dict(
             creds_dict, scope)
@@ -44,46 +59,53 @@ def get_sheet_data():
         return df
 
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"ERROR GOOGLE SHEET: {e}")
         return None
 
+
+# ==============================
+# START COMMAND
+# ==============================
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     bot.reply_to(
         message,
-        "Halo! Saya Bot Info Site.\n\nSilakan masukkan Site ID yang ingin dicari."
+        "Halo! 👋\n\nSilakan masukkan Site ID yang ingin dicari."
     )
 
 
-@bot.message_handler(func=lambda message: True)
-def echo_message(message):
-    site_id_cari = message.text.strip()
+# ==============================
+# SEARCH SITE ID
+# ==============================
 
+@bot.message_handler(func=lambda message: True)
+def search_site(message):
+
+    site_id_cari = message.text.strip()
     df = get_sheet_data()
 
     if df is None:
         bot.reply_to(
             message,
-            "❌ Gagal mengambil data dari Google Sheet.\n\nCek ENV GOOGLE_CREDENTIALS di Railway."
+            "❌ Gagal mengambil data dari Google Sheet.\nCek konfigurasi Railway."
         )
         return
 
     try:
-        result = df[df.iloc[:, 4].astype(str).str.strip() == site_id_cari]
-
-        if result.empty:
-            result = df[df.iloc[:, 4].astype(str).str.upper().str.strip() == site_id_cari.upper()]
+        # Cari di kolom ke-5 (index 4)
+        result = df[df.iloc[:, 4].astype(str).str.strip().str.upper() == site_id_cari.upper()]
 
         if result.empty:
             bot.reply_to(
                 message,
                 f"❌ Site ID '{site_id_cari}' tidak ditemukan."
             )
-        else:
-            row = result.iloc[0]
+            return
 
-            response = f"""
+        row = result.iloc[0]
+
+        response = f"""
 <b>📋 DATA SITE</b>
 ━━━━━━━━━━━━━━━
 
@@ -99,15 +121,19 @@ def echo_message(message):
 <b>Nilai BoQ (Survey) :</b> {row.iloc[35]}
 <b>New TA AREA :</b> {row.iloc[66]}
 <b>NEW INFRA / FIBERIZATION :</b> {row.iloc[100]}
-            """
+        """
 
-            bot.reply_to(message, response, parse_mode='HTML')
+        bot.reply_to(message, response, parse_mode='HTML')
 
     except Exception as e:
-        bot.reply_to(message, f"Error: {str(e)}")
-        print(f"Error Detail: {e}")
+        bot.reply_to(message, f"❌ Terjadi error: {str(e)}")
+        print(f"DETAIL ERROR: {e}")
 
 
-print("Bot sedang berjalan...")
+# ==============================
+# RUN BOT
+# ==============================
+
+print("🚀 Bot sedang berjalan...")
 bot.remove_webhook()
-bot.infinity_polling()
+bot.infinity_polling(skip_pending=True)
