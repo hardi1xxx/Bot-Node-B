@@ -106,7 +106,7 @@ def search_site(message):
 <b>📋 DATA SITE</b>
 ━━━━━━━━━━━━━━━
 
-<b>Site ID :</b> {row.iloc[4]}
+<b>Site ID :</b> {row.iloc[4]}({row.iloc[8]})
 <b>Plan Deploy :</b> {row.iloc[1]}
 <b>Sub Sistem :</b> {row.iloc[3]}
 <b>Witel & STO :</b> {row.iloc[5]} ({row.iloc[6]})
@@ -115,7 +115,7 @@ def search_site(message):
 <b>Panjang Kabel :</b> {row.iloc[29]}
 <b>Jenis Kabel :</b> {row.iloc[30]} ({row.iloc[31]})
 <b>Tiang :</b> {row.iloc[32]}
-<b>Nilai BoQ (Survey) :</b> {row.iloc[35]}
+<b>Nilai BoQ (Survey) :</b> {row.iloc[34]}
 <b>New TA AREA :</b> {row.iloc[66]}
 <b>NEW INFRA / FIBERIZATION :</b> {row.iloc[100]}
         """
