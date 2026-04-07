@@ -20,6 +20,7 @@ if not TOKEN:
 SPREADSHEET_ID = "124EjHM5jfcsLez2G0R2_ZSpD9He-IjawllH1N8BJXng"
 NAMA_SHEET = "Node B"
 
+# Status yang ingin dikirim notifikasi
 TARGET_STATUS = [
     "-6. L0 Ready",
     "-7. L1 Ready",
@@ -28,10 +29,10 @@ TARGET_STATUS = [
 
 STATE_FILE = "last_state.json"
 
-# Ganti dengan chat ID grup Telegram
-GROUP_CHAT_ID = "ISI_GROUP_CHAT_ID"
+# Chat ID grup Telegram tempat notifikasi
+GROUP_CHAT_ID = os.getenv("GROUP_CHAT_ID")  # contoh: "-1001234567890"
 
-# Untuk webhook
+# URL webhook publik
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # contoh: https://myapp.up.railway.app/bot
 
 bot = telebot.TeleBot(TOKEN)
@@ -146,7 +147,6 @@ def search_site(message):
 # ==============================
 
 def check_updates():
-    print("🔍 Cek update Google Sheet...")
     df = get_sheet_data()
     if df is None:
         print("❌ Gagal ambil data")
@@ -161,7 +161,7 @@ def check_updates():
             status = str(row.iloc[20]).strip()
             new_state[site_id] = status
 
-            # Cek: hanya kirim jika status berubah dan termasuk TARGET_STATUS
+            # Kirim notif hanya jika status berubah dan baru masuk TARGET_STATUS
             if site_id in last_state:
                 prev_status = last_state[site_id]
                 if status != prev_status and status in TARGET_STATUS:
@@ -192,23 +192,22 @@ def check_updates():
                     except Exception as e:
                         print(f"Gagal kirim notifikasi ke grup: {e}")
             else:
-                # Kalau site_id baru, simpan state tapi tidak kirim notif
+                # Site baru, simpan state tapi tidak kirim notif
                 pass
 
         except Exception as e:
             print(f"Error row: {e}")
 
     save_state(new_state)
-    save_state(new_state)
 
 # ==============================
-# SCHEDULER LOOP (cek tiap 60 detik)
+# SCHEDULER LOOP
 # ==============================
 
 def scheduler():
     while True:
         check_updates()
-        time.sleep(60)
+        time.sleep(60)  # cek setiap 60 detik
 
 threading.Thread(target=scheduler).start()
 
@@ -228,7 +227,6 @@ def webhook():
 # ==============================
 
 if __name__ == "__main__":
-    # hapus webhook lama dulu
     bot.remove_webhook()
     bot.set_webhook(url=WEBHOOK_URL)
     print("🚀 Bot siap menerima webhook...")
