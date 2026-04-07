@@ -6,6 +6,7 @@ import json
 import threading
 import time
 from datetime import datetime
+from flask import Flask, request
 from oauth2client.service_account import ServiceAccountCredentials
 
 # ==============================
@@ -13,14 +14,12 @@ from oauth2client.service_account import ServiceAccountCredentials
 # ==============================
 
 TOKEN = os.getenv("BOT_TOKEN")
-
 if not TOKEN:
     raise ValueError("BOT_TOKEN tidak ditemukan di Environment Variables!")
 
 SPREADSHEET_ID = "124EjHM5jfcsLez2G0R2_ZSpD9He-IjawllH1N8BJXng"
 NAMA_SHEET = "Node B"
 
-# TARGET STATUS
 TARGET_STATUS = [
     "-6. L0 Ready",
     "-7. L1 Ready",
@@ -29,10 +28,14 @@ TARGET_STATUS = [
 
 STATE_FILE = "last_state.json"
 
-# Ganti dengan chat ID grup Telegram tempat bot berada
+# Ganti dengan chat ID grup Telegram
 GROUP_CHAT_ID = "ISI_GROUP_CHAT_ID"
 
+# Untuk webhook
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # contoh: https://myapp.up.railway.app/bot
+
 bot = telebot.TeleBot(TOKEN)
+app = Flask(__name__)
 
 # ==============================
 # GOOGLE SHEET CONNECT
@@ -83,18 +86,18 @@ def save_state(state):
         json.dump(state, f)
 
 # ==============================
-# COMMAND START
+# COMMAND /start
 # ==============================
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     bot.reply_to(
         message,
-        "Halo 👋\n\nGunakan perintah:\n/cari SITEID\n\nBot juga otomatis memberi notifikasi di grup jika ada update status tertentu."
+        "Halo 👋\n\nGunakan perintah:\n/cari SITEID\n\nBot otomatis memberi notifikasi di grup jika ada update status tertentu."
     )
 
 # ==============================
-# COMMAND CARI
+# COMMAND /cari
 # ==============================
 
 @bot.message_handler(commands=['cari'])
@@ -139,7 +142,7 @@ def search_site(message):
         print(f"DETAIL ERROR: {e}")
 
 # ==============================
-# CEK PERUBAHAN DATA UNTUK NOTIFIKASI
+# CEK PERUBAHAN DATA (NOTIFIKASI)
 # ==============================
 
 def check_updates():
@@ -158,7 +161,6 @@ def check_updates():
             status = str(row.iloc[20]).strip()
             new_state[site_id] = status
 
-            # cek perubahan ke status target
             if site_id in last_state:
                 if status != last_state[site_id] and status in TARGET_STATUS:
                     tanggal = datetime.now().strftime("%d-%m-%Y %H:%M")
@@ -192,21 +194,34 @@ def check_updates():
     save_state(new_state)
 
 # ==============================
-# SCHEDULER LOOP
+# SCHEDULER LOOP (cek tiap 60 detik)
 # ==============================
 
 def scheduler():
     while True:
         check_updates()
-        time.sleep(60)  # cek tiap 60 detik
-
-# ==============================
-# RUN BOT
-# ==============================
-
-print("🚀 Bot sedang berjalan...")
+        time.sleep(60)
 
 threading.Thread(target=scheduler).start()
 
-bot.remove_webhook()
-bot.infinity_polling(skip_pending=True)
+# ==============================
+# WEBHOOK SETUP
+# ==============================
+
+@app.route(f"/bot", methods=['POST'])
+def webhook():
+    json_str = request.get_data().decode('utf-8')
+    update = telebot.types.Update.de_json(json_str)
+    bot.process_new_updates([update])
+    return "!", 200
+
+# ==============================
+# RUN FLASK
+# ==============================
+
+if __name__ == "__main__":
+    # hapus webhook lama dulu
+    bot.remove_webhook()
+    bot.set_webhook(url=WEBHOOK_URL)
+    print("🚀 Bot siap menerima webhook...")
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
