@@ -161,8 +161,10 @@ def check_updates():
             status = str(row.iloc[20]).strip()
             new_state[site_id] = status
 
+            # Cek: hanya kirim jika status berubah dan termasuk TARGET_STATUS
             if site_id in last_state:
-                if status != last_state[site_id] and status in TARGET_STATUS:
+                prev_status = last_state[site_id]
+                if status != prev_status and status in TARGET_STATUS:
                     tanggal = datetime.now().strftime("%d-%m-%Y %H:%M")
                     response = f"""
 <b>🚨 UPDATE DATA BARU</b>
@@ -186,11 +188,17 @@ def check_updates():
                     """
                     try:
                         bot.send_message(GROUP_CHAT_ID, response, parse_mode="HTML")
+                        print(f"Notifikasi terkirim: {site_id} → {status}")
                     except Exception as e:
                         print(f"Gagal kirim notifikasi ke grup: {e}")
+            else:
+                # Kalau site_id baru, simpan state tapi tidak kirim notif
+                pass
+
         except Exception as e:
             print(f"Error row: {e}")
 
+    save_state(new_state)
     save_state(new_state)
 
 # ==============================
