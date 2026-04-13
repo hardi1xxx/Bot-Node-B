@@ -196,7 +196,7 @@ def run_scheduler():
         check_status_changes()
         time.sleep(60)  # cek tiap 60 detik
 
-threading.Thread(target=run_scheduler).start()
+threading.Thread(target=run_scheduler, daemon=True).start()
 
 # ==============================
 # RUN BOT
