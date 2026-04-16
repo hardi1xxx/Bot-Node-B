@@ -16,7 +16,7 @@ last_fetch_time = 0
 cached_df = None
 first_run = True
 
-CACHE_DURATION = 30  # detik
+CACHE_DURATION = 30
 
 # ==============================
 # CONFIG
@@ -32,6 +32,12 @@ NAMA_SHEET = "Node B"
 bot = telebot.TeleBot(TOKEN)
 
 # ==============================
+# NORMALISASI STATUS
+# ==============================
+def clean_status(s):
+    return " ".join(str(s).upper().split())
+
+# ==============================
 # CONNECT GOOGLE SHEET (CACHE)
 # ==============================
 def get_sheet_data():
@@ -44,9 +50,6 @@ def get_sheet_data():
 
     try:
         credentials_raw = os.getenv("GOOGLE_CREDENTIALS")
-
-        if not credentials_raw:
-            raise ValueError("GOOGLE_CREDENTIALS tidak ditemukan!")
 
         scope = [
             "https://www.googleapis.com/auth/spreadsheets",
@@ -61,11 +64,7 @@ def get_sheet_data():
 
         data = sheet.get_all_values()
 
-        if not data:
-            return None
-
         df = pd.DataFrame(data)
-
         headers = df.iloc[0]
         df = df[1:]
         df.columns = headers
@@ -86,10 +85,7 @@ def get_sheet_data():
 def send_welcome(message):
     user_chats.add(message.chat.id)
 
-    bot.reply_to(
-        message,
-        "Halo 👋\n\nGunakan:\n/cari SITEID"
-    )
+    bot.reply_to(message, "✅ Bot aktif!\nGunakan:\n/cari SITEID")
 
 # ==============================
 # COMMAND CARI
@@ -99,7 +95,7 @@ def search_site(message):
     try:
         site_id_cari = message.text.split(maxsplit=1)[1].strip()
     except:
-        bot.reply_to(message, "Gunakan format:\n/cari SITEID")
+        bot.reply_to(message, "Gunakan:\n/cari SITEID")
         return
 
     df = get_sheet_data()
@@ -108,16 +104,15 @@ def search_site(message):
         bot.reply_to(message, "❌ Gagal ambil data.")
         return
 
-    try:
-        result = df[df.iloc[:, 4].astype(str).str.strip().str.upper() == site_id_cari.upper()]
+    result = df[df.iloc[:, 4].astype(str).str.strip().str.upper() == site_id_cari.upper()]
 
-        if result.empty:
-            bot.reply_to(message, f"❌ Site ID '{site_id_cari}' tidak ditemukan.")
-            return
+    if result.empty:
+        bot.reply_to(message, "❌ Tidak ditemukan")
+        return
 
-        row = result.iloc[0]
+    row = result.iloc[0]
 
-        response = f"""
+    response = f"""
 <b>📋 DATA SITE</b>
 ━━━━━━━━━━━━━━━
 
@@ -133,34 +128,28 @@ def search_site(message):
 <b>Nilai BoQ (Survey) :</b> {row.iloc[33]}
 <b>New TA AREA :</b> {row.iloc[66]}
 <b>NEW INFRA / FIBERIZATION :</b> {row.iloc[100]}
-        """
-
-        bot.reply_to(message, response, parse_mode='HTML')
-
-    except Exception as e:
-        bot.reply_to(message, f"❌ Error: {str(e)}")
-
-# ==============================
-# KIRIM NOTIF (FORMAT SESUAI REQUEST)
-# ==============================
-def send_notif(row):
-    message = f"""
-<b>🚨 NOTIFIKASI STATUS BERUBAH</b>
-━━━━━━━━━━━━━━━
-
-<b>Site ID :</b> {row.iloc[4]}-{row.iloc[7]} 
-<b>Plan Deploy :</b> {row.iloc[1]} 
-<b>Sub Sistem :</b> {row.iloc[3]} 
-<b>Witel & STO :</b> {row.iloc[5]} ({row.iloc[6]}) 
-<b>Status Pekerjaan :</b> {row.iloc[20]} 
-<b>Catuan :</b> {row.iloc[28]} 
-<b>Panjang Kabel :</b> {row.iloc[29]} 
-<b>Jenis Kabel :</b> {row.iloc[30]} ({row.iloc[31]}) 
-<b>Tiang :</b> {row.iloc[32]} 
-<b>Nilai BoQ (Survey) :</b> {row.iloc[33]} 
-<b>New TA AREA :</b> {row.iloc[66]} 
-<b>NEW INFRA / FIBERIZATION :</b> {row.iloc[100]}
     """
+
+    bot.reply_to(message, response, parse_mode='HTML')
+
+# ==============================
+# DASHBOARD NOTIF
+# ==============================
+def send_dashboard(changes_list):
+    if not changes_list:
+        return
+
+    message = "<b>🚨 UPDATE STATUS (DASHBOARD)</b>\n━━━━━━━━━━━━━━━\n\n"
+
+    for row in changes_list:
+        message += f"""
+<b>{row.iloc[4]}-{row.iloc[7]}</b>
+Status : {row.iloc[20]}
+Witel  : {row.iloc[5]}
+
+"""
+
+    message += f"\nTotal Update: {len(changes_list)}"
 
     for chat_id in user_chats:
         try:
@@ -178,39 +167,38 @@ def check_status_changes():
     if df is None:
         return
 
-    changes = 0
+    changes_list = []
 
     for _, row in df.iterrows():
         try:
             site_id = str(row.iloc[4]).strip()
-            status = str(row.iloc[20]).strip().upper()
+            status = clean_status(row.iloc[20])
 
-            # pertama kali (initial load)
             if site_id not in last_status:
                 last_status[site_id] = status
-
-                if not first_run and any(x in status for x in ["L1 READY", "OA CONFIRMATION"]):
-                    send_notif(row)
-
                 continue
 
-            # tidak berubah
             if last_status[site_id] == status:
                 continue
 
-            # berubah
+            old_status = last_status[site_id]
             last_status[site_id] = status
-            changes += 1
 
-            if any(x in status for x in ["7. L1 Ready", "7. L3. OA Confirmation"]):
-                send_notif(row)
+            print(f"{site_id} | {old_status} -> {status}")
+
+            if first_run:
+                continue
+
+            if ("L1 READY" in status) or ("OA CONFIRMATION" in status):
+                changes_list.append(row)
 
         except Exception as e:
             print(f"ERROR LOOP: {e}")
             continue
 
-    if changes > 0:
-        print(f"✅ Perubahan: {changes}")
+    if changes_list:
+        send_dashboard(changes_list)
+        print(f"✅ Notif dashboard: {len(changes_list)}")
 
 # ==============================
 # SCHEDULER
@@ -235,4 +223,10 @@ if __name__ == "__main__":
     print("🚀 Bot berjalan...")
     bot.remove_webhook()
     time.sleep(2)
-    bot.infinity_polling(skip_pending=True)
+
+    while True:
+        try:
+            bot.infinity_polling(skip_pending=True)
+        except Exception as e:
+            print(f"RESTART BOT: {e}")
+            time.sleep(5)
