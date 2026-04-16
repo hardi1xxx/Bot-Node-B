@@ -15,7 +15,7 @@ last_status = {}
 last_fetch_time = 0
 cached_df = None
 first_run = True
-
+sent_history = set()
 CACHE_DURATION = 30
 
 # ==============================
@@ -35,7 +35,7 @@ bot = telebot.TeleBot(TOKEN)
 # NORMALISASI STATUS
 # ==============================
 def clean_status(s):
-    return " ".join(str(s).upper().split())
+    return " ".join(str(s).upper().replace(".", "").split())
 
 # ==============================
 # CONNECT GOOGLE SHEET (CACHE)
@@ -189,8 +189,16 @@ def check_status_changes():
             if first_run:
                 continue
 
+            key = f"{site_id}-{status}"
+
             if ("L1 READY" in status) or ("OA CONFIRMATION" in status):
+                
+                # kalau sudah pernah dikirim → skip
+                if key in sent_history:
+                    continue
+
                 changes_list.append(row)
+                sent_history.add(key)
 
         except Exception as e:
             print(f"ERROR LOOP: {e}")
