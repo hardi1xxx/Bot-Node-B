@@ -148,8 +148,8 @@ def check_status_changes():
             status = str(row.iloc[20]).strip()
 
             # hanya pantau status ini
-            if status not in ["OA (JT)", "OA (PT1)"]:
-                continue
+            if status not in ["15. OA (JT)", "16. OA (PT1)"]:
+            continue
 
             # simpan awal (biar tidak spam pertama kali)
             if site_id not in last_status:
