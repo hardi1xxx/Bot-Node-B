@@ -14,7 +14,7 @@ user_chats = set()
 last_status = {}
 last_fetch_time = 0
 cached_df = None
-
+first_run = True
 CACHE_DURATION = 30  # detik (cache biar hemat API)
 
 # ==============================
@@ -153,9 +153,12 @@ def check_status_changes():
             if site_id not in last_status:
                 last_status[site_id] = status
 
-                # kirim notif kalau langsung status target
-                if any(x in status for x in ["L1 READY", "OA CONFIRMATION"]):
-                    send_notif(row)
+                # hanya kirim jika bukan first run
+                if not first_run:
+                    if any(x in status for x in ["L1 READY", "OA CONFIRMATION"]):
+                        send_notif(row)
+
+    continue
 
                 continue
 
@@ -200,12 +203,16 @@ def send_notif(row):
 # SCHEDULER
 # ==============================
 def run_scheduler():
+    global first_run
+
     while True:
         check_status_changes()
-        time.sleep(30)  # lebih cepat & aman
 
-threading.Thread(target=run_scheduler, daemon=True).start()
+        # setelah 1x jalan, ubah jadi False
+        if first_run:
+            first_run = False
 
+        time.sleep(30)
 # ==============================
 # RUN BOT
 # ==============================
