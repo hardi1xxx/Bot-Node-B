@@ -202,7 +202,7 @@ def check_status_changes():
             last_status[site_id] = status
             changes += 1
 
-            if any(x in status for x in ["L1 READY", "OA CONFIRMATION"]):
+            if any(x in status for x in ["7. L1 Ready", "7. L3. OA Confirmation"]):
                 send_notif(row)
 
         except Exception as e:
