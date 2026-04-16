@@ -157,7 +157,7 @@ def check_status_changes():
                 last_status[site_id] = status
 
                 # hanya kirim notif jika jadi OA
-                if status in ["15. OA (JT)", "16. OA (PT1)"]:
+                if status in ["7. L1 Ready", "7. L3. OA Confirmation"]:
 
                     message = f"""
 <b>🚨 NOTIFIKASI STATUS BERUBAH</b>
