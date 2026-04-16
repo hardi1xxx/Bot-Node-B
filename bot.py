@@ -145,19 +145,25 @@ def check_status_changes():
     for _, row in df.iterrows():
         try:
             site_id = str(row.iloc[4]).strip()
-            status = str(row.iloc[20]).strip()
+            status_raw = str(row.iloc[20])
+            status = status_raw.strip().upper()
+
+            # DEBUG (WAJIB SAAT TEST)
+            print(f"{site_id} | OLD: {last_status.get(site_id)} | NEW: {status}")
 
             # simpan pertama kali
             if site_id not in last_status:
                 last_status[site_id] = status
                 continue
 
-            # cek perubahan
+            # jika status berubah
             if last_status[site_id] != status:
                 last_status[site_id] = status
 
-                # hanya kirim notif jika jadi OA
-                if status in ["7. L1 Ready", "7. L3. OA Confirmation"]:
+                # DETEKSI STATUS TARGET (LEBIH FLEKSIBEL)
+                if any(x in status for x in ["L1 READY", "OA CONFIRMATION"]):
+
+                    print(f"🚨 KIRIM NOTIF: {site_id} - {status}")
 
                     message = f"""
 <b>🚨 NOTIFIKASI STATUS BERUBAH</b>
@@ -177,6 +183,7 @@ def check_status_changes():
 <b>NEW INFRA / FIBERIZATION :</b> {row.iloc[100]}
                     """
 
+                    # kirim ke semua user
                     for chat_id in user_chats:
                         try:
                             bot.send_message(chat_id, message, parse_mode='HTML')
