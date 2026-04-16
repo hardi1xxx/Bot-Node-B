@@ -147,20 +147,19 @@ def check_status_changes():
             site_id = str(row.iloc[4]).strip()
             status = str(row.iloc[20]).strip()
 
-            # hanya pantau status ini
-            if status not in ["15. OA (JT)", "16. OA (PT1)"]:
-            continue
-
-            # simpan awal (biar tidak spam pertama kali)
+            # simpan pertama kali
             if site_id not in last_status:
                 last_status[site_id] = status
                 continue
 
-            # jika ada perubahan
+            # cek perubahan
             if last_status[site_id] != status:
                 last_status[site_id] = status
 
-                message = f"""
+                # hanya kirim notif jika jadi OA
+                if status in ["15. OA (JT)", "16. OA (PT1)"]:
+
+                    message = f"""
 <b>🚨 NOTIFIKASI STATUS BERUBAH</b>
 ━━━━━━━━━━━━━━━
 
@@ -176,25 +175,24 @@ def check_status_changes():
 <b>Nilai BoQ (Survey) :</b> {row.iloc[33]}
 <b>New TA AREA :</b> {row.iloc[66]}
 <b>NEW INFRA / FIBERIZATION :</b> {row.iloc[100]}
-                """
+                    """
 
-                # kirim ke semua user yang pernah /start
-                for chat_id in user_chats:
-                    try:
-                        bot.send_message(chat_id, message, parse_mode='HTML')
-                    except Exception as e:
-                        print(f"Gagal kirim ke {chat_id}: {e}")
+                    for chat_id in user_chats:
+                        try:
+                            bot.send_message(chat_id, message, parse_mode='HTML')
+                        except Exception as e:
+                            print(f"Gagal kirim ke {chat_id}: {e}")
 
         except Exception as e:
             print(f"ERROR LOOP: {e}")
 
 # ==============================
-# SCHEDULER (AUTO CEK)
+# SCHEDULER
 # ==============================
 def run_scheduler():
     while True:
         check_status_changes()
-        time.sleep(60)  # cek tiap 60 detik
+        time.sleep(60)
 
 threading.Thread(target=run_scheduler, daemon=True).start()
 
