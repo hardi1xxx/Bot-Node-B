@@ -15,7 +15,8 @@ last_status = {}
 last_fetch_time = 0
 cached_df = None
 first_run = True
-CACHE_DURATION = 30  # detik (cache biar hemat API)
+
+CACHE_DURATION = 30  # detik
 
 # ==============================
 # CONFIG
@@ -31,14 +32,13 @@ NAMA_SHEET = "Node B"
 bot = telebot.TeleBot(TOKEN)
 
 # ==============================
-# CONNECT GOOGLE SHEET (CACHED)
+# CONNECT GOOGLE SHEET (CACHE)
 # ==============================
 def get_sheet_data():
     global last_fetch_time, cached_df
 
     now = time.time()
 
-    # pakai cache
     if cached_df is not None and (now - last_fetch_time < CACHE_DURATION):
         return cached_df
 
@@ -122,9 +122,17 @@ def search_site(message):
 ━━━━━━━━━━━━━━━
 
 <b>Site ID :</b> {row.iloc[4]}-{row.iloc[7]}
-<b>Status :</b> {row.iloc[20]}
 <b>Plan Deploy :</b> {row.iloc[1]}
+<b>Sub Sistem :</b> {row.iloc[3]}
 <b>Witel & STO :</b> {row.iloc[5]} ({row.iloc[6]})
+<b>Status Pekerjaan :</b> {row.iloc[20]}
+<b>Catuan :</b> {row.iloc[28]}
+<b>Panjang Kabel :</b> {row.iloc[29]}
+<b>Jenis Kabel :</b> {row.iloc[30]} ({row.iloc[31]})
+<b>Tiang :</b> {row.iloc[32]}
+<b>Nilai BoQ (Survey) :</b> {row.iloc[33]}
+<b>New TA AREA :</b> {row.iloc[66]}
+<b>NEW INFRA / FIBERIZATION :</b> {row.iloc[100]}
         """
 
         bot.reply_to(message, response, parse_mode='HTML')
@@ -133,10 +141,38 @@ def search_site(message):
         bot.reply_to(message, f"❌ Error: {str(e)}")
 
 # ==============================
+# KIRIM NOTIF (FORMAT SESUAI REQUEST)
+# ==============================
+def send_notif(row):
+    message = f"""
+<b>🚨 NOTIFIKASI STATUS BERUBAH</b>
+━━━━━━━━━━━━━━━
+
+<b>Site ID :</b> {row.iloc[4]}-{row.iloc[7]} 
+<b>Plan Deploy :</b> {row.iloc[1]} 
+<b>Sub Sistem :</b> {row.iloc[3]} 
+<b>Witel & STO :</b> {row.iloc[5]} ({row.iloc[6]}) 
+<b>Status Pekerjaan :</b> {row.iloc[20]} 
+<b>Catuan :</b> {row.iloc[28]} 
+<b>Panjang Kabel :</b> {row.iloc[29]} 
+<b>Jenis Kabel :</b> {row.iloc[30]} ({row.iloc[31]}) 
+<b>Tiang :</b> {row.iloc[32]} 
+<b>Nilai BoQ (Survey) :</b> {row.iloc[33]} 
+<b>New TA AREA :</b> {row.iloc[66]} 
+<b>NEW INFRA / FIBERIZATION :</b> {row.iloc[100]}
+    """
+
+    for chat_id in user_chats:
+        try:
+            bot.send_message(chat_id, message, parse_mode='HTML')
+        except:
+            pass
+
+# ==============================
 # MONITORING STATUS
 # ==============================
 def check_status_changes():
-    global last_status
+    global last_status, first_run
 
     df = get_sheet_data()
     if df is None:
@@ -149,55 +185,32 @@ def check_status_changes():
             site_id = str(row.iloc[4]).strip()
             status = str(row.iloc[20]).strip().upper()
 
-            # pertama kali simpan
+            # pertama kali (initial load)
             if site_id not in last_status:
                 last_status[site_id] = status
 
-                # hanya kirim jika bukan first run
-                if not first_run:
-                    if any(x in status for x in ["L1 READY", "OA CONFIRMATION"]):
-                        send_notif(row)
-
-    continue
+                if not first_run and any(x in status for x in ["L1 READY", "OA CONFIRMATION"]):
+                    send_notif(row)
 
                 continue
 
-            # skip kalau sama
+            # tidak berubah
             if last_status[site_id] == status:
                 continue
 
-            # update
+            # berubah
             last_status[site_id] = status
             changes += 1
 
-            # kirim notif jika status penting
             if any(x in status for x in ["L1 READY", "OA CONFIRMATION"]):
                 send_notif(row)
 
-        except:
+        except Exception as e:
+            print(f"ERROR LOOP: {e}")
             continue
 
     if changes > 0:
         print(f"✅ Perubahan: {changes}")
-
-# ==============================
-# FUNCTION KIRIM NOTIF
-# ==============================
-def send_notif(row):
-    message = f"""
-<b>🚨 STATUS BERUBAH</b>
-━━━━━━━━━━━━━━━
-
-<b>Site ID :</b> {row.iloc[4]}-{row.iloc[7]}
-<b>Status :</b> {row.iloc[20]}
-<b>Witel :</b> {row.iloc[5]}
-    """
-
-    for chat_id in user_chats:
-        try:
-            bot.send_message(chat_id, message, parse_mode='HTML')
-        except:
-            pass
 
 # ==============================
 # SCHEDULER
@@ -208,11 +221,13 @@ def run_scheduler():
     while True:
         check_status_changes()
 
-        # setelah 1x jalan, ubah jadi False
         if first_run:
             first_run = False
 
         time.sleep(30)
+
+threading.Thread(target=run_scheduler, daemon=True).start()
+
 # ==============================
 # RUN BOT
 # ==============================
