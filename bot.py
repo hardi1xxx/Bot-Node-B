@@ -50,6 +50,8 @@ def get_sheet_data():
 
     try:
         credentials_raw = os.getenv("GOOGLE_CREDENTIALS")
+        if not credentials_raw:
+            raise ValueError("GOOGLE_CREDENTIALS environment variable tidak ditemukan!")
 
         scope = [
             "https://www.googleapis.com/auth/spreadsheets",
@@ -59,18 +61,39 @@ def get_sheet_data():
         creds_dict = json.loads(credentials_raw)
         creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
 
-        client = gspread.authorize(creds)
-        sheet = client.open_by_key(SPREADSHEET_ID).worksheet(NAMA_SHEET)
+        # FIX: Gunakan gspread.authorize sudah deprecated.
+        # Ganti dengan gspread.Client langsung
+        client = gspread.Client(auth=creds)
+        client.session = gspread.auth.BackoffHTTPSession()
+
+        spreadsheet = client.open_by_key(SPREADSHEET_ID)
+
+        # FIX: Cari sheet dengan nama yang cocok (case-insensitive + strip spasi)
+        sheet = None
+        for ws in spreadsheet.worksheets():
+            ws_title = ws.title.strip()
+            print(f"  → Sheet ditemukan: '{ws_title}'")
+            if ws_title.upper() == NAMA_SHEET.strip().upper():
+                sheet = ws
+                break
+
+        if sheet is None:
+            available = [ws.title for ws in spreadsheet.worksheets()]
+            raise ValueError(
+                f"Sheet '{NAMA_SHEET}' tidak ditemukan! "
+                f"Sheet yang tersedia: {available}"
+            )
 
         data = sheet.get_all_values()
 
-        df = pd.DataFrame(data)
-        headers = df.iloc[0]
-        df = df[1:]
-        df.columns = headers
+        if not data or len(data) < 2:
+            raise ValueError("Sheet kosong atau hanya berisi header!")
+
+        df = pd.DataFrame(data[1:], columns=data[0])
 
         cached_df = df
         last_fetch_time = now
+        print(f"✅ Data berhasil diambil: {len(df)} baris, {len(df.columns)} kolom")
 
         return df
 
@@ -84,7 +107,6 @@ def get_sheet_data():
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user_chats.add(message.chat.id)
-
     bot.reply_to(message, "✅ Bot aktif!\nGunakan:\n/cari SITEID")
 
 # ==============================
@@ -94,40 +116,47 @@ def send_welcome(message):
 def search_site(message):
     try:
         site_id_cari = message.text.split(maxsplit=1)[1].strip()
-    except:
+    except IndexError:
         bot.reply_to(message, "Gunakan:\n/cari SITEID")
         return
 
     df = get_sheet_data()
 
     if df is None:
-        bot.reply_to(message, "❌ Gagal ambil data.")
+        bot.reply_to(message, "❌ Gagal ambil data dari Google Sheet.")
         return
 
+    # Cari berdasarkan kolom SITE ID (index 4)
     result = df[df.iloc[:, 4].astype(str).str.strip().str.upper() == site_id_cari.upper()]
 
     if result.empty:
-        bot.reply_to(message, "❌ Tidak ditemukan")
+        bot.reply_to(message, f"❌ Site ID '{site_id_cari}' tidak ditemukan.")
         return
 
     row = result.iloc[0]
+
+    def safe(idx):
+        try:
+            return row.iloc[idx]
+        except Exception:
+            return "-"
 
     response = f"""
 <b>📋 DATA SITE</b>
 ━━━━━━━━━━━━━━━
 
-<b>Site ID :</b> {row.iloc[4]}-{row.iloc[7]}
-<b>Plan Deploy :</b> {row.iloc[1]}
-<b>Sub Sistem :</b> {row.iloc[3]}
-<b>Witel & STO :</b> {row.iloc[5]} ({row.iloc[6]})
-<b>Status Pekerjaan :</b> {row.iloc[20]}
-<b>Catuan :</b> {row.iloc[28]}
-<b>Panjang Kabel :</b> {row.iloc[29]}
-<b>Jenis Kabel :</b> {row.iloc[30]} ({row.iloc[31]})
-<b>Tiang :</b> {row.iloc[32]}
-<b>Nilai BoQ (Survey) :</b> {row.iloc[33]}
-<b>New TA AREA :</b> {row.iloc[66]}
-<b>NEW INFRA / FIBERIZATION :</b> {row.iloc[100]}
+<b>Site ID :</b> {safe(4)}-{safe(7)}
+<b>Plan Deploy :</b> {safe(1)}
+<b>Sub Sistem :</b> {safe(3)}
+<b>Witel &amp; STO :</b> {safe(5)} ({safe(6)})
+<b>Status Pekerjaan :</b> {safe(20)}
+<b>Catuan :</b> {safe(28)}
+<b>Panjang Kabel :</b> {safe(29)}
+<b>Jenis Kabel :</b> {safe(30)} ({safe(31)})
+<b>Tiang :</b> {safe(32)}
+<b>Nilai BoQ (Survey) :</b> {safe(33)}
+<b>New TA AREA :</b> {safe(66)}
+<b>NEW INFRA / FIBERIZATION :</b> {safe(100)}
     """
 
     bot.reply_to(message, response, parse_mode='HTML')
@@ -142,20 +171,22 @@ def send_dashboard(changes_list):
     message = "<b>🚨 UPDATE STATUS (DASHBOARD)</b>\n━━━━━━━━━━━━━━━\n\n"
 
     for row in changes_list:
-        message += f"""
-<b>{row.iloc[4]}-{row.iloc[7]}</b>
-Status : {row.iloc[20]}
-Witel  : {row.iloc[5]}
-
-"""
+        try:
+            message += (
+                f"<b>{row.iloc[4]}-{row.iloc[7]}</b>\n"
+                f"Status : {row.iloc[20]}\n"
+                f"Witel  : {row.iloc[5]}\n\n"
+            )
+        except Exception:
+            continue
 
     message += f"\nTotal Update: {len(changes_list)}"
 
-    for chat_id in user_chats:
+    for chat_id in list(user_chats):
         try:
             bot.send_message(chat_id, message, parse_mode='HTML')
-        except:
-            pass
+        except Exception as e:
+            print(f"Gagal kirim ke {chat_id}: {e}")
 
 # ==============================
 # MONITORING STATUS
@@ -172,6 +203,9 @@ def check_status_changes():
     for _, row in df.iterrows():
         try:
             site_id = str(row.iloc[4]).strip()
+            if not site_id or site_id == "nan":
+                continue
+
             status = clean_status(row.iloc[20])
 
             if site_id not in last_status:
@@ -184,7 +218,7 @@ def check_status_changes():
             old_status = last_status[site_id]
             last_status[site_id] = status
 
-            print(f"{site_id} | {old_status} -> {status}")
+            print(f"[STATUS] {site_id} | {old_status} → {status}")
 
             if first_run:
                 continue
@@ -192,11 +226,8 @@ def check_status_changes():
             key = f"{site_id}-{status}"
 
             if ("L1 READY" in status) or ("OA CONFIRMATION" in status):
-                
-                # kalau sudah pernah dikirim → skip
                 if key in sent_history:
                     continue
-
                 changes_list.append(row)
                 sent_history.add(key)
 
@@ -219,6 +250,7 @@ def run_scheduler():
 
         if first_run:
             first_run = False
+            print("✅ First run selesai. Monitoring aktif.")
 
         time.sleep(30)
 
