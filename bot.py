@@ -26,8 +26,8 @@ TOKEN = os.getenv("BOT_TOKEN")
 if not TOKEN:
     raise ValueError("BOT_TOKEN tidak ditemukan!")
 
-SPREADSHEET_ID = "124EjHM5jfcsLez2G0R2_ZSpD9He-IjawllH1N8BJXng"
-NAMA_SHEET = "Node B"
+SPREADSHEET_ID = "1h1NBs7k4rCibwFvNVu9t0rIlq-TuF7sh6YZvxhu9VqQ"
+NAMA_SHEET = "All Node B"
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -61,10 +61,8 @@ def get_sheet_data():
         creds_dict = json.loads(credentials_raw)
         creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
 
-        # FIX: Gunakan gspread.authorize sudah deprecated.
-        # Ganti dengan gspread.Client langsung
-        client = gspread.Client(auth=creds)
-        client.session = gspread.auth.BackoffHTTPSession()
+        # Gunakan authorize (kompatibel semua versi gspread)
+        client = gspread.authorize(creds)
 
         spreadsheet = client.open_by_key(SPREADSHEET_ID)
 
