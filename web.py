@@ -13,7 +13,7 @@ cached_df = None
 last_fetch_time = 0
 CACHE_DURATION = 60
 
-SPREADSHEET_ID = "124EjHM5jfcsLez2G0R2_ZSpD9He-IjawllH1N8BJXng"
+SPREADSHEET_ID = "1h1NBs7k4rCibwFvNVu9t0rIlq-TuF7sh6YZvxhu9VqQ"
 NAMA_SHEET = "All Node B"
 
 def get_sheet_data():
@@ -500,6 +500,10 @@ async function loadTable(page) {
 </script>
 </body>
 </html>"""
+
+@app.route("/health")
+def health():
+    return jsonify({"status": "ok"}), 200
 
 @app.route("/")
 def index():
