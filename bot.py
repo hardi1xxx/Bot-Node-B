@@ -9,15 +9,159 @@ import threading
 from google.oauth2.service_account import Credentials
 
 # ==============================
+# PERSISTENT STORAGE
+# Disimpan ke 2 tempat:
+# 1. File lokal (cache cepat, tapi hilang saat redeploy)
+# 2. Tab "Bot State" di Google Sheet (PERMANEN, tidak hilang saat redeploy)
+# ==============================
+STATE_FILE = "bot_state.json"
+STATE_SHEET_NAME = "Bot State"
+
+_gsheet_client = None
+_state_save_lock = threading.Lock()
+_last_sheet_save = 0
+SHEET_SAVE_THROTTLE = 5  # minimal jarak antar save ke Google Sheet (detik)
+
+def get_gsheet_client():
+    global _gsheet_client
+    if _gsheet_client is not None:
+        return _gsheet_client
+    try:
+        credentials_raw = os.getenv("GOOGLE_CREDENTIALS")
+        scope = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        creds_dict = json.loads(credentials_raw)
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+        _gsheet_client = gspread.authorize(creds)
+        return _gsheet_client
+    except Exception as e:
+        print(f"⚠️ Gagal buat Google Sheet client untuk state: {e}")
+        return None
+
+def get_or_create_state_sheet():
+    """Ambil tab 'Bot State'. Kalau belum ada, buat baru."""
+    client = get_gsheet_client()
+    if client is None:
+        return None
+    try:
+        spreadsheet = client.open_by_key(SPREADSHEET_ID)
+        for ws in spreadsheet.worksheets():
+            if ws.title.strip().upper() == STATE_SHEET_NAME.upper():
+                return ws
+        # Belum ada -> buat baru
+        ws = spreadsheet.add_worksheet(title=STATE_SHEET_NAME, rows=10, cols=2)
+        ws.update("A1", "key")
+        ws.update("B1", "value")
+        print(f"✅ Tab '{STATE_SHEET_NAME}' dibuat otomatis di spreadsheet.")
+        return ws
+    except Exception as e:
+        print(f"⚠️ Gagal akses/buat tab '{STATE_SHEET_NAME}': {e}")
+        return None
+
+def load_state_from_sheet():
+    """Load state dari Google Sheet. Return None kalau gagal/belum ada data."""
+    ws = get_or_create_state_sheet()
+    if ws is None:
+        return None
+    try:
+        cell = ws.acell("B2").value
+        if not cell:
+            return None
+        data = json.loads(cell)
+        return (
+            set(data.get("user_chats", [])),
+            data.get("last_status", {}),
+            set(data.get("sent_history", [])),
+        )
+    except Exception as e:
+        print(f"⚠️ Gagal load state dari Google Sheet: {e}")
+        return None
+
+def save_state_to_sheet(force=False):
+    """Simpan state ke Google Sheet, dengan throttle supaya tidak kena rate limit."""
+    global _last_sheet_save
+    now = time.time()
+    if not force and (now - _last_sheet_save < SHEET_SAVE_THROTTLE):
+        return
+    ws = get_or_create_state_sheet()
+    if ws is None:
+        return
+    try:
+        payload = json.dumps({
+            "user_chats": list(user_chats),
+            "last_status": last_status,
+            "sent_history": list(sent_history),
+            "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        })
+        ws.update("A2", "state_json")
+        ws.update("B2", payload)
+        _last_sheet_save = now
+    except Exception as e:
+        print(f"⚠️ Gagal simpan state ke Google Sheet: {e}")
+
+def load_state_from_file():
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, "r") as f:
+                data = json.load(f)
+                return (
+                    set(data.get("user_chats", [])),
+                    data.get("last_status", {}),
+                    set(data.get("sent_history", [])),
+                )
+        except Exception as e:
+            print(f"⚠️ Gagal load state dari file lokal: {e}")
+    return None
+
+def save_state_to_file():
+    try:
+        with open(STATE_FILE, "w") as f:
+            json.dump({
+                "user_chats": list(user_chats),
+                "last_status": last_status,
+                "sent_history": list(sent_history),
+            }, f)
+    except Exception as e:
+        print(f"⚠️ Gagal simpan state ke file lokal: {e}")
+
+def load_state():
+    """
+    Prioritas: Google Sheet (permanen) > file lokal > kosong.
+    Google Sheet jadi sumber utama karena tahan terhadap redeploy.
+    """
+    sheet_state = load_state_from_sheet()
+    if sheet_state is not None:
+        print("📂 State dimuat dari Google Sheet (sumber permanen).")
+        return sheet_state
+
+    file_state = load_state_from_file()
+    if file_state is not None:
+        print("📂 State dimuat dari file lokal (Google Sheet belum ada data).")
+        return file_state
+
+    print("📂 Tidak ada state tersimpan, mulai dari kosong.")
+    return set(), {}, set()
+
+def save_state(force=False):
+    """Simpan ke kedua tempat sekaligus."""
+    with _state_save_lock:
+        save_state_to_file()
+        save_state_to_sheet(force=force)
+
+# ==============================
 # GLOBAL VARIABLE
 # ==============================
-user_chats = set()
-last_status = {}
+SPREADSHEET_ID = "1h1NBs7k4rCibwFvNVu9t0rIlq-TuF7sh6YZvxhu9VqQ"
+
+user_chats, last_status, sent_history = load_state()
 last_fetch_time = 0
 cached_df = None
 first_run = True
-sent_history = set()
 CACHE_DURATION = 30
+
+print(f"📂 State siap: {len(user_chats)} chat, {len(last_status)} site dipantau, {len(sent_history)} histori notif")
 
 # ==============================
 # CONFIG
@@ -27,7 +171,6 @@ TOKEN = os.getenv("BOT_TOKEN")
 if not TOKEN:
     raise ValueError("BOT_TOKEN tidak ditemukan!")
 
-SPREADSHEET_ID = "1h1NBs7k4rCibwFvNVu9t0rIlq-TuF7sh6YZvxhu9VqQ"
 NAMA_SHEET = "All Node B"
 
 WEBAPP_URL = os.getenv("WEBAPP_URL", "https://bot-node-b-web-bghh-production.up.railway.app")
@@ -52,28 +195,15 @@ def get_sheet_data():
         return cached_df
 
     try:
-        credentials_raw = os.getenv("GOOGLE_CREDENTIALS")
-        if not credentials_raw:
-            raise ValueError("GOOGLE_CREDENTIALS environment variable tidak ditemukan!")
-
-        scope = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
-
-        creds_dict = json.loads(credentials_raw)
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-
-        # Gunakan authorize (kompatibel semua versi gspread)
-        client = gspread.authorize(creds)
+        client = get_gsheet_client()
+        if client is None:
+            raise ValueError("Gagal membuat Google Sheet client.")
 
         spreadsheet = client.open_by_key(SPREADSHEET_ID)
 
-        # FIX: Cari sheet dengan nama yang cocok (case-insensitive + strip spasi)
         sheet = None
         for ws in spreadsheet.worksheets():
             ws_title = ws.title.strip()
-            print(f"  → Sheet ditemukan: '{ws_title}'")
             if ws_title.upper() == NAMA_SHEET.strip().upper():
                 sheet = ws
                 break
@@ -94,7 +224,6 @@ def get_sheet_data():
 
         cached_df = df
         last_fetch_time = now
-        print(f"✅ Data berhasil diambil: {len(df)} baris, {len(df.columns)} kolom")
 
         return df
 
@@ -102,28 +231,30 @@ def get_sheet_data():
         print(f"ERROR GOOGLE SHEET: {e}")
         return None
 
+def make_markup(chat_type):
+    markup = types.InlineKeyboardMarkup()
+    if chat_type == "private":
+        markup.add(types.InlineKeyboardButton(
+            "📡 Buka Dashboard",
+            web_app=types.WebAppInfo(url=WEBAPP_URL)
+        ))
+    else:
+        markup.add(types.InlineKeyboardButton(
+            "📡 Buka Dashboard",
+            url=WEBAPP_URL
+        ))
+    return markup
+
 # ==============================
 # COMMAND START
 # ==============================
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user_chats.add(message.chat.id)
+    save_state(force=True)
+    print(f"✅ Chat {message.chat.id} ({message.chat.type}) terdaftar untuk notifikasi. Total: {len(user_chats)}")
 
-    markup = types.InlineKeyboardMarkup()
-    if message.chat.type == "private":
-        # Di chat pribadi: buka sebagai Web App (langsung di dalam Telegram)
-        markup.add(types.InlineKeyboardButton(
-            "📡 Buka Dashboard",
-            web_app=types.WebAppInfo(url=WEBAPP_URL)
-        ))
-    else:
-        # Di grup: Telegram tidak izinkan web_app inline button,
-        # jadi pakai link biasa (terbuka di browser)
-        markup.add(types.InlineKeyboardButton(
-            "📡 Buka Dashboard",
-            url=WEBAPP_URL
-        ))
-
+    markup = make_markup(message.chat.type)
     bot.reply_to(
         message,
         "✅ Bot aktif!\nGunakan:\n/cari SITEID\n\nAtau buka dashboard lengkap di bawah ini:",
@@ -147,7 +278,6 @@ def search_site(message):
         bot.reply_to(message, "❌ Gagal ambil data dari Google Sheet.")
         return
 
-    # Cari berdasarkan kolom SITE ID (index 4)
     result = df[df.iloc[:, 4].astype(str).str.strip().str.upper() == site_id_cari.upper()]
 
     if result.empty:
@@ -180,19 +310,7 @@ def search_site(message):
 <b>NEW INFRA / FIBERIZATION :</b> {safe(100)}
     """
 
-    site_id_full = f"{safe(4)}-{safe(7)}"
-    markup = types.InlineKeyboardMarkup()
-    if message.chat.type == "private":
-        markup.add(types.InlineKeyboardButton(
-            f"📡 Lihat di Dashboard",
-            web_app=types.WebAppInfo(url=WEBAPP_URL)
-        ))
-    else:
-        markup.add(types.InlineKeyboardButton(
-            f"📡 Lihat di Dashboard",
-            url=WEBAPP_URL
-        ))
-
+    markup = make_markup(message.chat.type)
     bot.reply_to(message, response, parse_mode='HTML', reply_markup=markup)
 
 # ==============================
@@ -200,6 +318,11 @@ def search_site(message):
 # ==============================
 def send_dashboard(changes_list):
     if not changes_list:
+        return
+
+    if not user_chats:
+        print("⚠️ Tidak ada chat terdaftar (user_chats kosong). Notifikasi tidak terkirim ke siapapun.")
+        print("   → Pastikan minimal 1 user/grup pernah kirim /start ke bot.")
         return
 
     message = "<b>🚨 UPDATE STATUS (DASHBOARD)</b>\n━━━━━━━━━━━━━━━\n\n"
@@ -216,23 +339,26 @@ def send_dashboard(changes_list):
 
     message += f"\nTotal Update: {len(changes_list)}"
 
+    success_count = 0
     for chat_id in list(user_chats):
         try:
-            chat = bot.get_chat(chat_id)
-            markup = types.InlineKeyboardMarkup()
-            if chat.type == "private":
-                markup.add(types.InlineKeyboardButton(
-                    "📡 Buka Dashboard",
-                    web_app=types.WebAppInfo(url=WEBAPP_URL)
-                ))
-            else:
-                markup.add(types.InlineKeyboardButton(
-                    "📡 Buka Dashboard",
-                    url=WEBAPP_URL
-                ))
+            try:
+                chat = bot.get_chat(chat_id)
+                chat_type = chat.type
+            except Exception:
+                chat_type = "private"
+
+            markup = make_markup(chat_type)
             bot.send_message(chat_id, message, parse_mode='HTML', reply_markup=markup)
+            success_count += 1
         except Exception as e:
-            print(f"Gagal kirim ke {chat_id}: {e}")
+            print(f"❌ Gagal kirim ke chat {chat_id}: {e}")
+            if "blocked" in str(e).lower() or "kicked" in str(e).lower() or "chat not found" in str(e).lower():
+                user_chats.discard(chat_id)
+                print(f"   → Chat {chat_id} dihapus dari daftar (bot diblokir/dikeluarkan).")
+
+    save_state(force=True)
+    print(f"📨 Notifikasi terkirim ke {success_count} chat.")
 
 # ==============================
 # MONITORING STATUS
@@ -242,9 +368,11 @@ def check_status_changes():
 
     df = get_sheet_data()
     if df is None:
+        print("⚠️ check_status_changes: data sheet kosong/gagal, skip cycle ini.")
         return
 
     changes_list = []
+    state_changed = False
 
     for _, row in df.iterrows():
         try:
@@ -256,6 +384,7 @@ def check_status_changes():
 
             if site_id not in last_status:
                 last_status[site_id] = status
+                state_changed = True
                 continue
 
             if last_status[site_id] == status:
@@ -263,27 +392,33 @@ def check_status_changes():
 
             old_status = last_status[site_id]
             last_status[site_id] = status
+            state_changed = True
 
             print(f"[STATUS] {site_id} | {old_status} → {status}")
 
             if first_run:
                 continue
 
-            key = f"{site_id}-{status}"
+            key = f"{site_id}|{status}"
 
             if ("L1 READY" in status) or ("OA CONFIRMATION" in status):
                 if key in sent_history:
+                    print(f"   → {key} sudah pernah dikirim, skip.")
                     continue
                 changes_list.append(row)
                 sent_history.add(key)
+                state_changed = True
 
         except Exception as e:
             print(f"ERROR LOOP: {e}")
             continue
 
+    if state_changed:
+        save_state()
+
     if changes_list:
         send_dashboard(changes_list)
-        print(f"✅ Notif dashboard: {len(changes_list)}")
+        print(f"✅ Notif dashboard: {len(changes_list)} perubahan status dikirim.")
 
 # ==============================
 # SCHEDULER
@@ -292,11 +427,14 @@ def run_scheduler():
     global first_run
 
     while True:
-        check_status_changes()
+        try:
+            check_status_changes()
+        except Exception as e:
+            print(f"❌ ERROR di scheduler: {e}")
 
         if first_run:
             first_run = False
-            print("✅ First run selesai. Monitoring aktif.")
+            print("✅ First run selesai. Monitoring aktif — perubahan status mulai sekarang akan dinotifikasi.")
 
         time.sleep(30)
 
