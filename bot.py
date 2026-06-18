@@ -10,17 +10,22 @@ from google.oauth2.service_account import Credentials
 
 # ==============================
 # PERSISTENT STORAGE
-# Disimpan ke 2 tempat:
-# 1. File lokal (cache cepat, tapi hilang saat redeploy)
-# 2. Tab "Bot State" di Google Sheet (PERMANEN, tidak hilang saat redeploy)
+# Disimpan ke 2 tempat (prioritas: Volume > Google Sheet > sementara):
+# 1. Railway Volume di /data (PERMANEN, tidak hilang saat redeploy, milik service sendiri)
+# 2. Tab "Bot State" di Google Sheet (PERMANEN juga, tapi butuh akses Editor ke sheet)
+# Kalau Volume belum di-setup di Railway, otomatis fallback ke folder lokal (hilang saat redeploy).
 # ==============================
-STATE_FILE = "bot_state.json"
+VOLUME_DIR = "/data"
+STATE_FILE = os.path.join(VOLUME_DIR, "bot_state.json") if os.path.isdir(VOLUME_DIR) else "bot_state.json"
 STATE_SHEET_NAME = "Bot State"
 
 _gsheet_client = None
 _state_save_lock = threading.Lock()
 _last_sheet_save = 0
+_sheet_permission_denied = False
 SHEET_SAVE_THROTTLE = 5  # minimal jarak antar save ke Google Sheet (detik)
+
+print(f"💾 Lokasi penyimpanan state file: {STATE_FILE} {'(Railway Volume - permanen)' if os.path.isdir(VOLUME_DIR) else '(folder lokal - HILANG saat redeploy, setup Volume di Railway!)'}")
 
 def get_gsheet_client():
     global _gsheet_client
@@ -42,6 +47,9 @@ def get_gsheet_client():
 
 def get_or_create_state_sheet():
     """Ambil tab 'Bot State'. Kalau belum ada, buat baru."""
+    global _sheet_permission_denied
+    if _sheet_permission_denied:
+        return None
     client = get_gsheet_client()
     if client is None:
         return None
@@ -57,7 +65,12 @@ def get_or_create_state_sheet():
         print(f"✅ Tab '{STATE_SHEET_NAME}' dibuat otomatis di spreadsheet.")
         return ws
     except Exception as e:
-        print(f"⚠️ Gagal akses/buat tab '{STATE_SHEET_NAME}': {e}")
+        if "PERMISSION_DENIED" in str(e) or "403" in str(e):
+            _sheet_permission_denied = True
+            print(f"⚠️ Tidak ada izin akses tulis ke spreadsheet (View-only). "
+                  f"Lewati Google Sheet, pakai Railway Volume saja.")
+        else:
+            print(f"⚠️ Gagal akses/buat tab '{STATE_SHEET_NAME}': {e}")
         return None
 
 def load_state_from_sheet():
@@ -81,7 +94,9 @@ def load_state_from_sheet():
 
 def save_state_to_sheet(force=False):
     """Simpan state ke Google Sheet, dengan throttle supaya tidak kena rate limit."""
-    global _last_sheet_save
+    global _last_sheet_save, _sheet_permission_denied
+    if _sheet_permission_denied:
+        return  # Sudah tahu tidak ada izin, jangan coba-coba terus (hindari spam log)
     now = time.time()
     if not force and (now - _last_sheet_save < SHEET_SAVE_THROTTLE):
         return
@@ -99,7 +114,13 @@ def save_state_to_sheet(force=False):
         ws.update("B2", payload)
         _last_sheet_save = now
     except Exception as e:
-        print(f"⚠️ Gagal simpan state ke Google Sheet: {e}")
+        if "PERMISSION_DENIED" in str(e) or "403" in str(e):
+            _sheet_permission_denied = True
+            print(f"⚠️ Tidak ada izin tulis ke Google Sheet (akses View-only). "
+                  f"State akan disimpan ke Railway Volume saja. "
+                  f"Minta akses Editor ke pemilik sheet untuk mengaktifkan cadangan ganda.")
+        else:
+            print(f"⚠️ Gagal simpan state ke Google Sheet: {e}")
 
 def load_state_from_file():
     if os.path.exists(STATE_FILE):
@@ -128,17 +149,23 @@ def save_state_to_file():
 
 def load_state():
     """
-    Prioritas: Google Sheet (permanen) > file lokal > kosong.
-    Google Sheet jadi sumber utama karena tahan terhadap redeploy.
+    Prioritas: file di Railway Volume (kalau ada & terbaru) > Google Sheet > kosong.
+    Volume jadi sumber utama karena tidak bergantung pada izin akses Google Sheet
+    (yang mungkin cuma View-only). Google Sheet tetap dicoba sebagai pelengkap/cadangan.
     """
+    file_state = load_state_from_file()
+    if file_state is not None and os.path.isdir(VOLUME_DIR):
+        print("📂 State dimuat dari Railway Volume (sumber permanen utama).")
+        # Tetap coba sinkron ke Google Sheet kalau memungkinkan (silent, tidak blocking)
+        return file_state
+
     sheet_state = load_state_from_sheet()
     if sheet_state is not None:
-        print("📂 State dimuat dari Google Sheet (sumber permanen).")
+        print("📂 State dimuat dari Google Sheet.")
         return sheet_state
 
-    file_state = load_state_from_file()
     if file_state is not None:
-        print("📂 State dimuat dari file lokal (Google Sheet belum ada data).")
+        print("📂 State dimuat dari file lokal (sementara, akan hilang saat redeploy).")
         return file_state
 
     print("📂 Tidak ada state tersimpan, mulai dari kosong.")
@@ -446,11 +473,18 @@ threading.Thread(target=run_scheduler, daemon=True).start()
 if __name__ == "__main__":
     print("🚀 Bot berjalan...")
     bot.remove_webhook()
-    time.sleep(2)
+    time.sleep(3)
 
     while True:
         try:
-            bot.infinity_polling(skip_pending=True)
+            bot.infinity_polling(skip_pending=True, timeout=20, long_polling_timeout=20)
         except Exception as e:
-            print(f"RESTART BOT: {e}")
-            time.sleep(5)
+            err_str = str(e)
+            if "409" in err_str or "Conflict" in err_str:
+                # Instance lama (dari deploy sebelumnya) masih zombie & belum lepas polling.
+                # Tunggu lebih lama supaya tidak terus-terusan rebutan.
+                print(f"⚠️ Konflik 409 terdeteksi (instance lama mungkin masih hidup). Tunggu 15 detik sebelum retry...")
+                time.sleep(15)
+            else:
+                print(f"RESTART BOT: {e}")
+                time.sleep(5)
