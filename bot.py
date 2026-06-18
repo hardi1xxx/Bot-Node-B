@@ -1,4 +1,5 @@
 import telebot
+from telebot import types
 import gspread
 import pandas as pd
 import os
@@ -28,6 +29,8 @@ if not TOKEN:
 
 SPREADSHEET_ID = "1h1NBs7k4rCibwFvNVu9t0rIlq-TuF7sh6YZvxhu9VqQ"
 NAMA_SHEET = "All Node B"
+
+WEBAPP_URL = os.getenv("WEBAPP_URL", "https://bot-node-b-web-bghh-production.up.railway.app")
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -105,7 +108,27 @@ def get_sheet_data():
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user_chats.add(message.chat.id)
-    bot.reply_to(message, "✅ Bot aktif!\nGunakan:\n/cari SITEID")
+
+    markup = types.InlineKeyboardMarkup()
+    if message.chat.type == "private":
+        # Di chat pribadi: buka sebagai Web App (langsung di dalam Telegram)
+        markup.add(types.InlineKeyboardButton(
+            "📡 Buka Dashboard",
+            web_app=types.WebAppInfo(url=WEBAPP_URL)
+        ))
+    else:
+        # Di grup: Telegram tidak izinkan web_app inline button,
+        # jadi pakai link biasa (terbuka di browser)
+        markup.add(types.InlineKeyboardButton(
+            "📡 Buka Dashboard",
+            url=WEBAPP_URL
+        ))
+
+    bot.reply_to(
+        message,
+        "✅ Bot aktif!\nGunakan:\n/cari SITEID\n\nAtau buka dashboard lengkap di bawah ini:",
+        reply_markup=markup
+    )
 
 # ==============================
 # COMMAND CARI
@@ -157,7 +180,20 @@ def search_site(message):
 <b>NEW INFRA / FIBERIZATION :</b> {safe(100)}
     """
 
-    bot.reply_to(message, response, parse_mode='HTML')
+    site_id_full = f"{safe(4)}-{safe(7)}"
+    markup = types.InlineKeyboardMarkup()
+    if message.chat.type == "private":
+        markup.add(types.InlineKeyboardButton(
+            f"📡 Lihat di Dashboard",
+            web_app=types.WebAppInfo(url=WEBAPP_URL)
+        ))
+    else:
+        markup.add(types.InlineKeyboardButton(
+            f"📡 Lihat di Dashboard",
+            url=WEBAPP_URL
+        ))
+
+    bot.reply_to(message, response, parse_mode='HTML', reply_markup=markup)
 
 # ==============================
 # DASHBOARD NOTIF
@@ -182,7 +218,19 @@ def send_dashboard(changes_list):
 
     for chat_id in list(user_chats):
         try:
-            bot.send_message(chat_id, message, parse_mode='HTML')
+            chat = bot.get_chat(chat_id)
+            markup = types.InlineKeyboardMarkup()
+            if chat.type == "private":
+                markup.add(types.InlineKeyboardButton(
+                    "📡 Buka Dashboard",
+                    web_app=types.WebAppInfo(url=WEBAPP_URL)
+                ))
+            else:
+                markup.add(types.InlineKeyboardButton(
+                    "📡 Buka Dashboard",
+                    url=WEBAPP_URL
+                ))
+            bot.send_message(chat_id, message, parse_mode='HTML', reply_markup=markup)
         except Exception as e:
             print(f"Gagal kirim ke {chat_id}: {e}")
 
