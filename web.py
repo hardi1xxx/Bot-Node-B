@@ -130,7 +130,7 @@ def api_update_status():
                 break
         if row_index is None:
             return jsonify({"success": False, "error": "Site ID tidak ditemukan"}), 404
-        current_note = str(rows[row_index - 2][21] if len(rows[row_index - 2]) > 21 else "").strip()
+        current_note = str(rows[row_index - 1][21] if len(rows[row_index - 1]) > 21 else "").strip()
         today = time.strftime("%d/%m/%Y")
         new_note = f"{today} : {note}"
         if current_note:
