@@ -185,7 +185,11 @@ SPREADSHEET_ID = "1h1NBs7k4rCibwFvNVu9t0rIlq-TuF7sh6YZvxhu9VqQ"
 user_chats, last_status, sent_history = load_state()
 last_fetch_time = 0
 cached_df = None
-first_run = True
+# first_run cuma True kalau memang belum ada history tersimpan sama sekali (deploy pertama kali).
+# Kalau ini redeploy dan state lama berhasil dimuat, first_run harus False supaya perubahan
+# status yang terjadi SAAT bot mati (proses redeploy) tetap terdeteksi & dinotifikasi,
+# bukan dianggap "baseline baru" lalu di-skip.
+first_run = (len(last_status) == 0)
 CACHE_DURATION = 30
 
 print(f"📂 State siap: {len(user_chats)} chat, {len(last_status)} site dipantau, {len(sent_history)} histori notif")
@@ -422,6 +426,16 @@ def check_status_changes():
             state_changed = True
 
             print(f"[STATUS] {site_id} | {old_status} → {status}")
+
+            # Site ini baru saja KELUAR dari status yang pernah dinotifikasi (L1 READY / OA CONFIRMATION).
+            # Hapus riwayat kirim lamanya, supaya kalau nanti dia MASUK LAGI ke status itu
+            # (misal sempat di-revert lalu di-confirm ulang), dianggap kejadian baru & dinotifikasi lagi.
+            if ("L1 READY" in old_status) or ("OA CONFIRMATION" in old_status):
+                stale_keys = {k for k in sent_history if k.startswith(f"{site_id}|")}
+                if stale_keys:
+                    sent_history.difference_update(stale_keys)
+                    state_changed = True
+                    print(f"   → {site_id} keluar dari status ternotifikasi, riwayat kirim di-reset ({len(stale_keys)} entri).")
 
             if first_run:
                 continue
