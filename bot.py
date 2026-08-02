@@ -213,6 +213,12 @@ DISABLE_NOTIFICATIONS = os.getenv("DISABLE_NOTIFICATIONS", "false").lower() in (
 if DISABLE_NOTIFICATIONS:
     print("🔕 Notifikasi otomatis DISABLED oleh variabel lingkungan DISABLE_NOTIFICATIONS")
 
+# Jika ingin sepenuhnya menghapus/menonaktifkan notifikasi perubahan status,
+# set DISABLE_STATUS_NOTIFICATIONS=1/true/yes di environment.
+DISABLE_STATUS_NOTIFICATIONS = os.getenv("DISABLE_STATUS_NOTIFICATIONS", "false").lower() in ("1", "true", "yes", "y")
+if DISABLE_STATUS_NOTIFICATIONS:
+    print("🔕 Notifikasi PERUBAHAN STATUS dinonaktifkan oleh variabel lingkungan DISABLE_STATUS_NOTIFICATIONS")
+
 # ==============================
 # NORMALISASI STATUS
 # ==============================
@@ -413,6 +419,30 @@ def check_status_changes():
 
     changes_list = []
     state_changed = False
+
+    # Jika notifikasi perubahan status dinonaktifkan, kita tetap update `last_status`
+    # supaya state internal sinkron, tetapi tidak menambahkan ke `changes_list`
+    # dan tidak mengirim notifikasi.
+    if DISABLE_STATUS_NOTIFICATIONS:
+        for _, row in df.iterrows():
+            try:
+                site_id = str(row.iloc[4]).strip()
+                if not site_id or site_id == "nan":
+                    continue
+
+                status = clean_status(row.iloc[20])
+
+                # Set last_status ketika belum ada atau berubah, tanpa notif
+                if site_id not in last_status or last_status[site_id] != status:
+                    last_status[site_id] = status
+                    state_changed = True
+            except Exception as e:
+                print(f"ERROR LOOP (silent update): {e}")
+                continue
+
+        if state_changed:
+            save_state()
+        return
 
     for _, row in df.iterrows():
         try:
