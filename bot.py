@@ -208,6 +208,11 @@ WEBAPP_URL = os.getenv("WEBAPP_URL", "https://bot-node-b-web-bghh-production.up.
 
 bot = telebot.TeleBot(TOKEN)
 
+# Jika ingin mematikan notifikasi otomatis sementara, set DISABLE_NOTIFICATIONS=1/true/yes
+DISABLE_NOTIFICATIONS = os.getenv("DISABLE_NOTIFICATIONS", "false").lower() in ("1", "true", "yes", "y")
+if DISABLE_NOTIFICATIONS:
+    print("🔕 Notifikasi otomatis DISABLED oleh variabel lingkungan DISABLE_NOTIFICATIONS")
+
 # ==============================
 # NORMALISASI STATUS
 # ==============================
@@ -349,6 +354,10 @@ def search_site(message):
 # ==============================
 def send_dashboard(changes_list):
     if not changes_list:
+        return
+
+    if DISABLE_NOTIFICATIONS:
+        print("🔕 Notifikasi otomatis dimatikan; melewatkan pengiriman dashboard.")
         return
 
     if not user_chats:
