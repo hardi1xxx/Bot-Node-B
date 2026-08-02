@@ -16,12 +16,35 @@ CACHE_DURATION = 60
 SPREADSHEET_ID = "1h1NBs7k4rCibwFvNVu9t0rIlq-TuF7sh6YZvxhu9VqQ"
 NAMA_SHEET = "All Node B"
 
+
+def get_sheet():
+    credentials_raw = os.getenv("GOOGLE_CREDENTIALS", "").strip()
+    if not credentials_raw:
+        print("ERROR: GOOGLE_CREDENTIALS is not set")
+        return None
+    scope = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds_dict = json.loads(credentials_raw)
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+    client = gspread.authorize(creds)
+    spreadsheet = client.open_by_key(SPREADSHEET_ID)
+    sheet = None
+    for ws in spreadsheet.worksheets():
+        if ws.title.strip().upper() == NAMA_SHEET.strip().upper():
+            sheet = ws
+            break
+    return sheet
+
+
 def get_sheet_data():
     global last_fetch_time, cached_df
     now = time.time()
     if cached_df is not None and (now - last_fetch_time < CACHE_DURATION):
         return cached_df
     try:
+<<<<<<< HEAD
         credentials_raw = os.getenv("GOOGLE_CREDENTIALS")
         scope = [
             "https://www.googleapis.com/auth/spreadsheets",
@@ -36,6 +59,9 @@ def get_sheet_data():
             if ws.title.strip().upper() == NAMA_SHEET.strip().upper():
                 sheet = ws
                 break
+=======
+        sheet = get_sheet()
+>>>>>>> 32ff266 (add data update status progress)
         if sheet is None:
             return None
         data = sheet.get_all_values()
@@ -67,6 +93,11 @@ def api_search():
             return str(v) if v else "-"
         except:
             return "-"
+    note_text = ""
+    try:
+        note_text = str(row.iloc[21]) if len(row) > 21 else ""
+    except Exception:
+        note_text = ""
     return jsonify({
         "found": True,
         "data": {
@@ -76,6 +107,7 @@ def api_search():
             "witel": safe(5),
             "sto": safe(6),
             "status": safe(20),
+            "note": note_text,
             "catuan": safe(28),
             "panjang_kabel": safe(29),
             "jenis_kabel": f"{safe(30)} ({safe(31)})",
@@ -85,6 +117,50 @@ def api_search():
             "infra": safe(100),
         }
     })
+
+@app.route("/api/update_status", methods=["POST"])
+def api_update_status():
+    data = request.get_json(silent=True) or {}
+    site_id = str(data.get("site_id", "")).strip()
+    status = str(data.get("status", "")).strip()
+    note = str(data.get("note", "")).strip()
+    if not site_id:
+        return jsonify({"success": False, "error": "Site ID kosong"}), 400
+    if not status:
+        return jsonify({"success": False, "error": "Status pekerjaan wajib diisi"}), 400
+    if not note:
+        return jsonify({"success": False, "error": "Keterangan wajib diisi"}), 400
+    try:
+        sheet = get_sheet()
+        if sheet is None:
+            return jsonify({"success": False, "error": "Sheet tidak tersedia"}), 500
+        rows = sheet.get_all_values()
+        row_index = None
+        for idx, row in enumerate(rows[1:], start=2):
+            if not row:
+                continue
+            row_site = str(row[4] if len(row) > 4 else "").strip()
+            row_name = str(row[7] if len(row) > 7 else "").strip()
+            combined = f"{row_site}-{row_name}" if row_site and row_name else row_site
+            if site_id == row_site or site_id == row_name or site_id == combined:
+                row_index = idx
+                break
+        if row_index is None:
+            return jsonify({"success": False, "error": "Site ID tidak ditemukan"}), 404
+        current_note = str(rows[row_index - 2][21] if len(rows[row_index - 2]) > 21 else "").strip()
+        today = time.strftime("%d/%m/%Y")
+        new_note = f"{today} : {note}"
+        if current_note:
+            new_note = f"{new_note}\n{current_note}"
+        sheet.update_cell(row_index, 21, status)
+        sheet.update_cell(row_index, 22, new_note)
+        global cached_df, last_fetch_time
+        cached_df = None
+        last_fetch_time = 0
+        return jsonify({"success": True, "message": "Status dan keterangan berhasil diperbarui"})
+    except Exception as e:
+        print(f"ERROR: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route("/api/dashboard")
 def api_dashboard():
@@ -219,6 +295,15 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 .result-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;padding-bottom:1rem;border-bottom:1px solid var(--border);}
 .result-site-id{font-family:'Space Grotesk',sans-serif;font-size:1.4rem;font-weight:700;color:var(--accent);}
 .status-badge{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:500;}
+.update-form{margin-top:1.25rem;padding:1rem;border:1px solid var(--border2);border-radius:var(--radius-sm);background:rgba(255,255,255,0.03);}
+.update-form-title{font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.75rem;}
+.update-form input,.update-form select,.update-form textarea{width:100%;padding:10px 12px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--bg3);color:var(--text);font-size:14px;font-family:'Inter',sans-serif;margin-bottom:.75rem;}
+.update-form select option{background:var(--bg2);color:var(--text);}
+.update-form textarea{min-height:90px;resize:vertical;}
+.update-form button{padding:.7rem 1rem;border:none;border-radius:var(--radius-sm);background:var(--accent);color:#0A0F1E;font-weight:700;cursor:pointer;}
+.update-form button:hover{background:var(--accent2);} 
+.update-form .hint{font-size:12px;color:var(--text3);margin-top:.4rem;}
+.update-form .note-block{margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--border2);} 
 .status-l1{background:rgba(34,197,94,.15);color:#22C55E;border:1px solid rgba(34,197,94,.3);}
 .status-oa{background:rgba(245,158,11,.15);color:#F59E0B;border:1px solid rgba(245,158,11,.3);}
 .status-progress{background:rgba(0,212,255,.15);color:var(--accent);border:1px solid rgba(0,212,255,.3);}
@@ -226,8 +311,9 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 .status-default{background:var(--bg3);color:var(--text2);border:1px solid var(--border2);}
 .result-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;}
 .result-field{background:var(--bg3);border-radius:var(--radius-sm);padding:12px;}
+.result-field.full{grid-column:1 / -1;}
 .field-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;}
-.field-value{font-size:14px;color:var(--text);font-weight:500;}
+.field-value{font-size:14px;color:var(--text);font-weight:500;white-space:pre-wrap;word-break:break-word;}
 .error-msg{text-align:center;padding:2rem;color:var(--red);background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:var(--radius);}
 
 /* DASHBOARD */
@@ -391,6 +477,7 @@ async function doSearch() {
       return;
     }
     const data = d.data;
+    const currentNote = data.note ? data.note.replace(/\n/g, '<br>') : '-';
     el.innerHTML = `
     <div class="result-card">
       <div class="result-header">
@@ -410,10 +497,68 @@ async function doSearch() {
         <div class="result-field"><div class="field-label">Nilai BoQ (Survey)</div><div class="field-value">${data.boq}</div></div>
         <div class="result-field"><div class="field-label">New TA Area</div><div class="field-value">${data.ta_area}</div></div>
         <div class="result-field"><div class="field-label">New Infra / Fiberization</div><div class="field-value">${data.infra}</div></div>
+        <div class="result-field full"><div class="field-label">Catatan Kolom V</div><div class="field-value">${currentNote}</div></div>
+      </div>
+      <div class="update-form">
+        <div class="update-form-title">Update Status & Catatan</div>
+        <select id="updateStatus">
+          <option value="">-- Pilih status --</option>
+          <option value="0. HOLD">0. HOLD</option>
+          <option value="0.1 Proposed Drop">0.1 Proposed Drop</option>
+          <option value="0.2 L0 Drop">0.2 L0 Drop</option>
+          <option value="0.3 Drop MoM">0.3 Drop MoM</option>
+          <option value="1. L0 Survey">1. L0 Survey</option>
+          <option value="1.1 Done Survey">1.1 Done Survey</option>
+          <option value="2. L0 DRM">2. L0 DRM</option>
+          <option value="3. L0 Progress Perizinan">3. L0 Progress Perizinan</option>
+          <option value="4. L0 Material Delivery">4. L0 Material Delivery</option>
+          <option value="5.0 L0 Progress FO">5.0 L0 Progress FO</option>
+          <option value="6. L0 Ready">6. L0 Ready</option>
+          <option value="7. L1 Ready">7. L1 Ready</option>
+          <option value="7. L3. OA Confirmation">7. L3. OA Confirmation</option>
+          <option value="5.1 L0 Progress - Issue BTS">5.1 L0 Progress - Issue BTS</option>
+          <option value="0.1 Need Confirm by Tsel">0.1 Need Confirm by Tsel</option>
+          <option value="0.2 Confirmed Batal by Tsel">0.2 Confirmed Batal by Tsel</option>
+        </select>
+        <div class="note-block">
+          <textarea id="updateNote" placeholder="Contoh: 02/08/2026 : keterangan baru"></textarea>
+        </div>
+        <button onclick="submitUpdate('${data.site_id}')">Simpan Perubahan</button>
+        <div id="updateMessage" class="hint">Catatan akan ditambahkan ke atas dengan format tanggal otomatis.</div>
       </div>
     </div>`;
   } catch(e) {
     el.innerHTML = '<div class="error-msg">❌ Gagal menghubungi server.</div>';
+  }
+}
+
+async function submitUpdate(siteId) {
+  const statusInput = document.getElementById('updateStatus');
+  const noteInput = document.getElementById('updateNote');
+  const message = document.getElementById('updateMessage');
+  if (!statusInput || !noteInput) return;
+  const status = statusInput.value.trim();
+  const note = noteInput.value.trim();
+  if (!status || !note) {
+    message.innerHTML = '<span style="color:#F59E0B;">Status dan keterangan harus diisi.</span>';
+    return;
+  }
+  message.innerHTML = 'Menyimpan...';
+  try {
+    const r = await fetch('/api/update_status', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({site_id: siteId, status, note})
+    });
+    const d = await r.json();
+    if (d.success) {
+      message.innerHTML = '<span style="color:#22C55E;">Berhasil disimpan ke kolom status dan kolom V.</span>';
+      doSearch();
+    } else {
+      message.innerHTML = `<span style="color:#EF4444;">${d.error || 'Gagal menyimpan.'}</span>`;
+    }
+  } catch (e) {
+    message.innerHTML = '<span style="color:#EF4444;">Gagal menghubungi server.</span>';
   }
 }
 
