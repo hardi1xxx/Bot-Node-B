@@ -44,24 +44,7 @@ def get_sheet_data():
     if cached_df is not None and (now - last_fetch_time < CACHE_DURATION):
         return cached_df
     try:
-<<<<<<< HEAD
-        credentials_raw = os.getenv("GOOGLE_CREDENTIALS")
-        scope = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
-        creds_dict = json.loads(credentials_raw)
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-        client = gspread.authorize(creds)
-        spreadsheet = client.open_by_key(SPREADSHEET_ID)
-        sheet = None
-        for ws in spreadsheet.worksheets():
-            if ws.title.strip().upper() == NAMA_SHEET.strip().upper():
-                sheet = ws
-                break
-=======
         sheet = get_sheet()
->>>>>>> 32ff266 (add data update status progress)
         if sheet is None:
             return None
         data = sheet.get_all_values()
