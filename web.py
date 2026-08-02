@@ -227,6 +227,69 @@ def api_table():
     witels = sorted(df.iloc[:, 5].astype(str).dropna().unique().tolist())
     return jsonify({"total": total, "page": page, "per_page": per_page, "rows": rows, "witels": witels})
 
+# ==============================
+# TREE DIAGRAM (Site ID -> Plan Deploy -> Status Pekerjaan)
+# ==============================
+def _norm_status(s):
+    return " ".join(str(s).strip().upper().split())
+
+HOLD_STATUSES = {_norm_status(x) for x in [
+    "0.2 Confirmed Batal by Tsel", "0. HOLD", "0.1 Need Confirm by Tsel"
+]}
+L1_ONAIR_STATUSES = {_norm_status(x) for x in [
+    "7. L3. OA Confirmation", "7. L1 Ready"
+]}
+DROP_MOM_STATUSES = {_norm_status(x) for x in [
+    "0.3 Drop MoM"
+]}
+
+def build_tree_data(df):
+    site_col = df.iloc[:, 4].astype(str).str.strip()
+    valid_mask = (site_col != "") & (site_col.str.lower() != "nan")
+    total = int(valid_mask.sum())
+
+    plan_col = df.iloc[:, 1].astype(str).str.strip().replace("", "Lainnya")
+    plan_col = plan_col.where(plan_col.str.lower() != "nan", "Lainnya")
+    status_col = df.iloc[:, 20].astype(str).str.strip()
+
+    sub_plan = plan_col[valid_mask]
+    sub_status = status_col[valid_mask]
+
+    branches = []
+    for plan_name in sub_plan.unique().tolist():
+        mask = sub_plan == plan_name
+        count_plan = int(mask.sum())
+        statuses_here = sub_status[mask]
+
+        group_counts = {}
+        for raw in statuses_here:
+            ns = _norm_status(raw)
+            if not ns or ns == "NAN":
+                key = "Lainnya"
+            elif ns in HOLD_STATUSES:
+                key = "Hold"
+            elif ns in L1_ONAIR_STATUSES:
+                key = "L1 - On Air"
+            elif ns in DROP_MOM_STATUSES:
+                key = "Drop MOM"
+            else:
+                key = raw.strip()
+            group_counts[key] = group_counts.get(key, 0) + 1
+
+        children = [{"name": k, "count": v} for k, v in
+                    sorted(group_counts.items(), key=lambda kv: -kv[1])]
+        branches.append({"name": plan_name, "count": count_plan, "children": children})
+
+    branches.sort(key=lambda b: -b["count"])
+    return {"total": total, "children": branches}
+
+@app.route("/api/tree")
+def api_tree():
+    df = get_sheet_data()
+    if df is None:
+        return jsonify({"error": "Gagal ambil data"}), 500
+    return jsonify(build_tree_data(df))
+
 HTML = r"""<!DOCTYPE html>
 <html lang="id">
 <head>
@@ -342,6 +405,32 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 .loading{text-align:center;padding:3rem;color:var(--text2);}
 .pulse{display:inline-block;width:8px;height:8px;background:var(--accent);border-radius:50%;animation:pulse 1s ease-in-out infinite;}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(.8);}}
+
+/* TREE DIAGRAM */
+.tree-diagram{overflow-x:auto;padding:1rem 0 2rem;}
+.tree-list{list-style:none;margin:0;padding-left:0;}
+.tree-list li{position:relative;}
+.tree-list ul.tree-list{margin-left:32px;padding-left:28px;position:relative;}
+.tree-list ul.tree-list > li{position:relative;padding:10px 0;}
+.tree-list ul.tree-list > li::before{content:'';position:absolute;left:-28px;top:0;bottom:50%;width:28px;border-left:2px solid var(--border2);border-bottom:2px solid var(--border2);border-radius:0 0 0 6px;}
+.tree-list ul.tree-list > li::after{content:'';position:absolute;left:-28px;top:50%;bottom:0;border-left:2px solid var(--border2);}
+.tree-list ul.tree-list > li:last-child::after{display:none;}
+.tree-node{display:inline-block;background:var(--card-bg);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px 18px;min-width:160px;text-align:center;}
+.tree-node .tn-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;}
+.tree-node .tn-name{font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-top:2px;white-space:nowrap;}
+.tree-node .tn-value{font-family:'Space Grotesk',sans-serif;font-size:1.25rem;font-weight:700;margin-top:2px;}
+.tree-node.root{background:var(--bg4);border-color:var(--accent);border-width:2px;}
+.tree-node.root .tn-value{color:var(--accent);}
+.tree-node.plan{border-color:var(--accent2);}
+.tree-node.plan .tn-value{color:var(--accent);}
+.tree-node.stat-hold{border-color:var(--red);}
+.tree-node.stat-hold .tn-value{color:var(--red);}
+.tree-node.stat-onair{border-color:var(--green);}
+.tree-node.stat-onair .tn-value{color:var(--green);}
+.tree-node.stat-drop{border-color:var(--orange);}
+.tree-node.stat-drop .tn-value{color:var(--orange);}
+.tree-node.stat-default{border-color:var(--border2);}
+.tree-node.stat-default .tn-value{color:var(--text2);}
 </style>
 </head>
 <body>
@@ -352,6 +441,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
     <button class="nav-tab active" onclick="showPage('search')">🔍 Cari Site</button>
     <button class="nav-tab" onclick="showPage('dashboard')">📊 Dashboard</button>
     <button class="nav-tab" onclick="showPage('table')">📋 Semua Data</button>
+    <button class="nav-tab" onclick="showPage('tree')">🌳 Tree Diagram</button>
   </div>
 </nav>
 
@@ -423,10 +513,20 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
   </div>
 </div>
 
+<!-- TREE DIAGRAM PAGE -->
+<div id="page-tree" class="page">
+  <div style="margin-bottom:1.5rem;">
+    <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.4rem;font-weight:700;">Tree Diagram Progress</h2>
+    <p style="color:var(--text2);font-size:13px;margin-top:4px;">Total Site → Plan Deploy → Status Pekerjaan</p>
+  </div>
+  <div id="treeContainer" class="tree-diagram"></div>
+</div>
+
 <script>
 let currentPage = 1;
 let dashboardLoaded = false;
 let tableLoaded = false;
+let treeLoaded = false;
 
 function showPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -435,6 +535,7 @@ function showPage(name) {
   event.target.classList.add('active');
   if (name === 'dashboard' && !dashboardLoaded) { loadDashboard(); dashboardLoaded = true; }
   if (name === 'table' && !tableLoaded) { loadTable(1); tableLoaded = true; }
+  if (name === 'tree' && !treeLoaded) { loadTree(); treeLoaded = true; }
 }
 
 function statusBadge(s) {
@@ -572,6 +673,49 @@ function searchSite(id) {
   document.querySelectorAll('.nav-tab').forEach((t,i) => { if(i===0) t.classList.add('active'); else t.classList.remove('active'); });
   document.getElementById('searchInput').value = id;
   doSearch();
+}
+
+function treeNodeClass(node, isRoot) {
+  if (isRoot) return 'tree-node root';
+  if (node.children) return 'tree-node plan';
+  const n = (node.name || '').toUpperCase();
+  if (n === 'HOLD') return 'tree-node stat-hold';
+  if (n === 'L1 - ON AIR') return 'tree-node stat-onair';
+  if (n === 'DROP MOM') return 'tree-node stat-drop';
+  return 'tree-node stat-default';
+}
+
+function renderTreeNode(node, isRoot) {
+  const cls = treeNodeClass(node, isRoot);
+  const label = isRoot ? 'Site ID' : (node.children ? 'Plan Deploy' : '');
+  let html = `<div class="${cls}">
+    ${label ? `<div class="tn-label">${label}</div>` : ''}
+    <div class="tn-name">${node.name}</div>
+    <div class="tn-value">${node.count.toLocaleString()}</div>
+  </div>`;
+  if (node.children && node.children.length) {
+    html += `<ul class="tree-list">` +
+      node.children.map(c => `<li>${renderTreeNode(c, false)}</li>`).join('') +
+      `</ul>`;
+  }
+  return html;
+}
+
+async function loadTree() {
+  const el = document.getElementById('treeContainer');
+  el.innerHTML = '<div class="loading"><span class="pulse"></span> Memuat diagram...</div>';
+  try {
+    const r = await fetch('/api/tree');
+    const d = await r.json();
+    if (d.error) {
+      el.innerHTML = `<div class="error-msg">❌ ${d.error}</div>`;
+      return;
+    }
+    const rootNode = { name: 'Total', count: d.total, children: d.children };
+    el.innerHTML = `<ul class="tree-list"><li>${renderTreeNode(rootNode, true)}</li></ul>`;
+  } catch (e) {
+    el.innerHTML = '<div class="error-msg">❌ Gagal memuat diagram.</div>';
+  }
 }
 
 let tableTimeout;
