@@ -468,7 +468,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(.8);}}
 
 /* TREE DIAGRAM (fan-out: root centered, children cascade down + slightly right) */
-.tree-diagram{overflow-x:auto;overflow-y:auto;padding:1rem 0;}
+.tree-diagram{overflow-x:auto;overflow-y:auto;padding:1rem 0 1rem 45%;}
 .node-group{display:flex;align-items:center;}
 .node-children{display:flex;flex-direction:column;margin-left:28px;position:relative;}
 .node-children::before{content:'';position:absolute;left:-28px;top:50%;width:28px;height:2px;background:var(--border2);}
