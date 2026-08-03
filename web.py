@@ -13,29 +13,41 @@ cached_df = None
 last_fetch_time = 0
 CACHE_DURATION = 60
 
+_sheet_cache = {"worksheet": None, "authorized_at": 0}
+SHEET_CLIENT_TTL = 1800  # re-authorize setiap 30 menit supaya token tidak basi
+
 SPREADSHEET_ID = "1h1NBs7k4rCibwFvNVu9t0rIlq-TuF7sh6YZvxhu9VqQ"
 NAMA_SHEET = "All Node B"
 
 
-def get_sheet():
+def get_sheet(force_refresh=False):
+    global _sheet_cache
+    now = time.time()
+    if not force_refresh and _sheet_cache["worksheet"] is not None and (now - _sheet_cache["authorized_at"] < SHEET_CLIENT_TTL):
+        return _sheet_cache["worksheet"]
     credentials_raw = os.getenv("GOOGLE_CREDENTIALS", "").strip()
     if not credentials_raw:
         print("ERROR: GOOGLE_CREDENTIALS is not set")
         return None
-    scope = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ]
-    creds_dict = json.loads(credentials_raw)
-    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-    client = gspread.authorize(creds)
-    spreadsheet = client.open_by_key(SPREADSHEET_ID)
-    sheet = None
-    for ws in spreadsheet.worksheets():
-        if ws.title.strip().upper() == NAMA_SHEET.strip().upper():
-            sheet = ws
-            break
-    return sheet
+    try:
+        scope = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        creds_dict = json.loads(credentials_raw)
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+        client = gspread.authorize(creds)
+        spreadsheet = client.open_by_key(SPREADSHEET_ID)
+        sheet = None
+        for ws in spreadsheet.worksheets():
+            if ws.title.strip().upper() == NAMA_SHEET.strip().upper():
+                sheet = ws
+                break
+        _sheet_cache = {"worksheet": sheet, "authorized_at": now}
+        return sheet
+    except Exception as e:
+        print(f"ERROR authorizing sheet: {e}")
+        return None
 
 
 def get_sheet_data():
@@ -117,26 +129,37 @@ def api_update_status():
         sheet = get_sheet()
         if sheet is None:
             return jsonify({"success": False, "error": "Sheet tidak tersedia"}), 500
-        rows = sheet.get_all_values()
+
+        # Ambil hanya kolom E-H (site id & site name) untuk cari baris,
+        # bukan seluruh sheet (~100+ kolom) seperti sebelumnya.
+        range_data = sheet.get("E:H")
         row_index = None
-        for idx, row in enumerate(rows[1:], start=2):
-            if not row:
-                continue
-            row_site = str(row[4] if len(row) > 4 else "").strip()
-            row_name = str(row[7] if len(row) > 7 else "").strip()
+        for i, row in enumerate(range_data):
+            if i == 0:
+                continue  # header
+            row_site = (row[0] if len(row) > 0 else "").strip()
+            row_name = (row[3] if len(row) > 3 else "").strip()
             combined = f"{row_site}-{row_name}" if row_site and row_name else row_site
             if site_id == row_site or site_id == row_name or site_id == combined:
-                row_index = idx
+                row_index = i + 1
                 break
         if row_index is None:
             return jsonify({"success": False, "error": "Site ID tidak ditemukan"}), 404
-        current_note = str(rows[row_index - 1][21] if len(rows[row_index - 1]) > 21 else "").strip()
+
+        # Ambil catatan lama hanya dari 1 sel (kolom V baris ini), bukan seluruh baris.
+        current_note = (sheet.cell(row_index, 22).value or "").strip()
+
         today = time.strftime("%d/%m/%Y")
         new_note = f"{today} : {note}"
         if current_note:
             new_note = f"{new_note}\n{current_note}"
-        sheet.update_cell(row_index, 21, status)
-        sheet.update_cell(row_index, 22, new_note)
+
+        # 1 kali batch_update untuk kolom U & V sekaligus, bukan 2 request terpisah.
+        sheet.batch_update([
+            {"range": f"U{row_index}", "values": [[status]]},
+            {"range": f"V{row_index}", "values": [[new_note]]},
+        ])
+
         global cached_df, last_fetch_time
         cached_df = None
         last_fetch_time = 0
