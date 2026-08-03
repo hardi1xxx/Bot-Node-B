@@ -468,7 +468,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(.8);}}
 
 /* TREE DIAGRAM (fan-out, flush left, compact to fit one screen) */
-.tree-diagram{overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 220px);padding:.5rem 0;}
+.tree-diagram{overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 200px);padding:.5rem 0;}
 .node-group{display:flex;align-items:center;}
 .node-children{display:flex;flex-direction:column;margin-left:24px;position:relative;}
 .node-children::before{content:'';position:absolute;left:-24px;top:50%;width:24px;height:2px;background:var(--border2);}
@@ -477,7 +477,12 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 .node-child::after{content:'';position:absolute;left:-24px;top:50%;bottom:0;border-left:2px solid var(--border2);}
 .node-child:first-child::before{top:50%;}
 .node-child:last-child::after{display:none;}
+.leaf-grid{display:flex;flex-wrap:wrap;align-content:flex-start;gap:5px;margin-left:24px;padding-left:20px;position:relative;max-width:640px;}
+.leaf-grid::before{content:'';position:absolute;left:-20px;top:50%;width:20px;height:2px;background:var(--border2);}
 .tree-node{display:inline-block;background:var(--card-bg);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:7px 12px;min-width:130px;text-align:center;cursor:pointer;transition:transform .15s,border-color .15s;}
+.tree-node.leaf-box{padding:4px 9px;min-width:96px;}
+.tree-node.leaf-box .tn-name{font-size:10.5px;}
+.tree-node.leaf-box .tn-value{font-size:.9rem;}
 .tree-node:hover{transform:translateY(-2px);border-color:var(--accent);}
 .tree-node .tn-label{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;}
 .tree-node .tn-name{font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:600;color:var(--text);margin-top:1px;white-space:nowrap;}
@@ -798,6 +803,18 @@ function renderTreeNode(node, depth, planName) {
     return `<div class="node-group">${boxHtml}</div>`;
   }
   const nextPlan = depth === 1 ? node.name : planName;
+  const allLeaf = node.children.every(c => !c.children || !c.children.length);
+  if (allLeaf && depth >= 2) {
+    const items = node.children.map(c => {
+      const cCls = treeNodeClass(depth + 1, c.name).replace('tree-node', 'tree-node leaf-box');
+      const cLabel = `${c.name} (Plan Deploy: ${thisPlan})`;
+      return `<div class="${cCls}" data-plan="${escAttr(thisPlan)}" data-group="${escAttr(c.name)}" data-label="${escAttr(cLabel)}">
+          <div class="tn-name">${c.name}</div>
+          <div class="tn-value">${c.count.toLocaleString()}</div>
+        </div>`;
+    }).join('');
+    return `<div class="node-group">${boxHtml}<div class="leaf-grid">${items}</div></div>`;
+  }
   const childrenHtml = node.children.map(c => `<div class="node-child">${renderTreeNode(c, depth + 1, nextPlan)}</div>`).join('');
   return `<div class="node-group">${boxHtml}<div class="node-children">${childrenHtml}</div></div>`;
 }
