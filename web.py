@@ -467,42 +467,52 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 .pulse{display:inline-block;width:8px;height:8px;background:var(--accent);border-radius:50%;animation:pulse 1s ease-in-out infinite;}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(.8);}}
 
-/* TREE DIAGRAM (compact vertical, fits one screen) */
-.tree-diagram{max-height:calc(100vh - 230px);overflow-y:auto;overflow-x:hidden;padding:.25rem 0;}
-.vtree-row{display:flex;align-items:center;gap:8px;padding:6px 12px;margin:3px 0;border-radius:var(--radius-sm);border:1px solid var(--border2);background:var(--card-bg);cursor:pointer;transition:border-color .15s;}
-.vtree-row:hover{border-color:var(--accent);}
-.vtree-row .vt-label{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;}
-.vtree-row .vt-name{font-family:'Space Grotesk',sans-serif;font-size:12.5px;font-weight:600;color:var(--text);}
-.vtree-row .vt-count{margin-left:auto;font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:700;}
-.vtree-row.root{background:var(--bg4);border-color:var(--accent);border-width:2px;}
-.vtree-row.root .vt-count{color:var(--accent);}
-.vtree-row.plan{border-left:3px solid var(--accent2);}
-.vtree-row.plan .vt-count{color:var(--accent);}
-.vtree-row.stat-hold{border-left:3px solid var(--red);}
-.vtree-row.stat-hold .vt-count{color:var(--red);}
-.vtree-row.stat-onair{border-left:3px solid var(--green);}
-.vtree-row.stat-onair .vt-count{color:var(--green);}
-.vtree-row.stat-drop{border-left:3px solid var(--orange);}
-.vtree-row.stat-drop .vt-count{color:var(--orange);}
-.vtree-row.stat-nyonair{border-left:3px solid var(--accent);}
-.vtree-row.stat-nyonair .vt-count{color:var(--accent);}
-.vtree-children{margin-left:20px;padding-left:14px;border-left:2px solid var(--border2);}
-.vtree-chips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px 20px;padding-left:14px;border-left:2px solid var(--border2);}
-.vtree-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:14px;border:1px solid var(--border2);background:var(--bg3);font-size:11px;color:var(--text2);cursor:pointer;white-space:nowrap;transition:border-color .15s;}
-.vtree-chip:hover{border-color:var(--accent);color:var(--text);}
-.vtree-chip .vc-count{font-family:'Space Grotesk',sans-serif;font-weight:700;color:var(--text);}
-.vtree-chip.stat-hold{border-color:rgba(239,68,68,.4);}
-.vtree-chip.stat-hold .vc-count{color:var(--red);}
+/* TREE DIAGRAM (horizontal, top-down, classic connector-line style) */
+.tree-diagram{overflow-x:auto;overflow-y:hidden;padding:2rem 1rem;}
+.tree{display:inline-block;min-width:100%;}
+.tree ul{padding-top:20px;position:relative;display:flex;justify-content:center;}
+.tree li{list-style:none;text-align:center;position:relative;padding:20px 10px 0 10px;}
+.tree li::before,.tree li::after{content:'';position:absolute;top:0;right:50%;border-top:2px solid var(--border2);width:50%;height:20px;}
+.tree li::after{right:auto;left:50%;border-left:2px solid var(--border2);}
+.tree li:only-child::after,.tree li:only-child::before{display:none;}
+.tree li:only-child{padding-top:0;}
+.tree li:first-child::before,.tree li:last-child::after{border:0 none;}
+.tree li:last-child::before{border-right:2px solid var(--border2);border-radius:0 6px 0 0;}
+.tree li:first-child::after{border-radius:6px 0 0 0;}
+.tree ul ul::before{content:'';position:absolute;top:0;left:50%;border-left:2px solid var(--border2);width:0;height:20px;}
+.tree-node{display:inline-block;background:var(--card-bg);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px 16px;min-width:150px;text-align:center;cursor:pointer;transition:transform .15s,border-color .15s;}
+.tree-node:hover{transform:translateY(-2px);border-color:var(--accent);}
+.tree-node .tn-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;}
+.tree-node .tn-name{font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-top:2px;white-space:nowrap;}
+.tree-node .tn-value{font-family:'Space Grotesk',sans-serif;font-size:1.25rem;font-weight:700;margin-top:2px;}
+.tree-node.root{background:var(--bg4);border-color:var(--accent);border-width:2px;}
+.tree-node.root .tn-value{color:var(--accent);}
+.tree-node.plan{border-color:var(--accent2);}
+.tree-node.plan .tn-value{color:var(--accent);}
+.tree-node.stat-hold{border-color:var(--red);}
+.tree-node.stat-hold .tn-value{color:var(--red);}
+.tree-node.stat-onair{border-color:var(--green);}
+.tree-node.stat-onair .tn-value{color:var(--green);}
+.tree-node.stat-drop{border-color:var(--orange);}
+.tree-node.stat-drop .tn-value{color:var(--orange);}
+.tree-node.stat-nyonair{border-color:var(--accent);}
+.tree-node.stat-nyonair .tn-value{color:var(--accent);}
+.tree-node.stat-default{border-color:var(--border2);}
+.tree-node.stat-default .tn-value{color:var(--text2);}
 
-/* MODAL (klik node -> list data) */
+/* MODAL (klik node -> list data / edit) */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;align-items:center;justify-content:center;padding:2rem;}
 .modal-overlay.active{display:flex;}
-.modal-box{background:var(--card-bg);border:1px solid var(--border2);border-radius:var(--radius);max-width:720px;width:100%;max-height:80vh;display:flex;flex-direction:column;animation:fadeIn .2s ease;}
+.modal-box{background:var(--card-bg);border:1px solid var(--border2);border-radius:var(--radius);max-width:760px;width:100%;max-height:82vh;display:flex;flex-direction:column;animation:fadeIn .2s ease;}
 .modal-header{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem 1.25rem;border-bottom:1px solid var(--border);}
 .modal-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1.05rem;}
 .modal-close{background:transparent;border:none;color:var(--text2);font-size:1.3rem;line-height:1;cursor:pointer;padding:4px;}
 .modal-close:hover{color:var(--text);}
 .modal-body{padding:1rem 1.25rem;overflow-y:auto;}
+.edit-btn{padding:4px 10px;border:1px solid var(--accent);background:transparent;color:var(--accent);border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;}
+.edit-btn:hover{background:var(--accent);color:#0A0F1E;}
+.back-btn{padding:.5rem .9rem;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);border-radius:var(--radius-sm);font-size:12px;cursor:pointer;margin-bottom:.85rem;}
+.back-btn:hover{border-color:var(--accent);color:var(--text);}
 </style>
 </head>
 <body>
@@ -699,7 +709,8 @@ async function doSearch() {
   }
 }
 
-async function submitUpdate(siteId) {
+async function submitUpdate(siteId, onSuccess) {
+  if (typeof onSuccess !== 'function') onSuccess = doSearch;
   const statusInput = document.getElementById('updateStatus');
   const noteInput = document.getElementById('updateNote');
   const message = document.getElementById('updateMessage');
@@ -720,7 +731,7 @@ async function submitUpdate(siteId) {
     const d = await r.json();
     if (d.success) {
       message.innerHTML = '<span style="color:#22C55E;">Berhasil disimpan ke kolom status dan kolom V.</span>';
-      doSearch();
+      onSuccess();
     } else {
       message.innerHTML = `<span style="color:#EF4444;">${d.error || 'Gagal menyimpan.'}</span>`;
     }
@@ -762,45 +773,36 @@ function escAttr(s) {
   return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function nodeColorClass(depth, name) {
-  if (depth === 0) return 'root';
-  if (depth === 1) return 'plan';
+function treeNodeClass(depth, name) {
+  if (depth === 0) return 'tree-node root';
+  if (depth === 1) return 'tree-node plan';
   const n = (name || '').toUpperCase();
-  if (n === 'HOLD') return 'stat-hold';
-  if (n === 'L1 - ON AIR') return 'stat-onair';
-  if (n === 'DROP MOM') return 'stat-drop';
-  if (n === 'NY ON AIR') return 'stat-nyonair';
-  return 'stat-default';
+  if (n === 'HOLD') return 'tree-node stat-hold';
+  if (n === 'L1 - ON AIR') return 'tree-node stat-onair';
+  if (n === 'DROP MOM') return 'tree-node stat-drop';
+  if (n === 'NY ON AIR') return 'tree-node stat-nyonair';
+  return 'tree-node stat-default';
 }
 
-function renderVerticalNode(node, depth, planName) {
-  const colorCls = nodeColorClass(depth, node.name);
+function renderTreeNode(node, depth, planName) {
+  const cls = treeNodeClass(depth, node.name);
   const label = depth === 0 ? 'Site ID' : (depth === 1 ? 'Plan Deploy' : '');
   const thisPlan = depth === 0 ? '' : (depth === 1 ? node.name : planName);
   const thisGroup = depth >= 2 ? node.name : '';
   const modalLabel = depth === 0 ? 'Total Semua Site'
     : depth === 1 ? `Plan Deploy: ${node.name}`
     : `${node.name} (Plan Deploy: ${thisPlan})`;
-
-  const rowHtml = `<div class="vtree-row ${colorCls} tnode" data-plan="${escAttr(thisPlan)}" data-group="${escAttr(thisGroup)}" data-label="${escAttr(modalLabel)}">
-      ${label ? `<span class="vt-label">${label}</span>` : ''}
-      <span class="vt-name">${node.name}</span>
-      <span class="vt-count">${node.count.toLocaleString()}</span>
+  let html = `<li><div class="${cls}" data-plan="${escAttr(thisPlan)}" data-group="${escAttr(thisGroup)}" data-label="${escAttr(modalLabel)}">
+      ${label ? `<div class="tn-label">${label}</div>` : ''}
+      <div class="tn-name">${node.name}</div>
+      <div class="tn-value">${node.count.toLocaleString()}</div>
     </div>`;
-
-  if (!node.children || !node.children.length) return rowHtml;
-
-  const allLeaf = node.children.every(c => !c.children || !c.children.length);
-  if (allLeaf) {
-    const chips = node.children.map(c => {
-      const cCls = nodeColorClass(depth + 1, c.name);
-      const cLabel = `${c.name} (Plan Deploy: ${thisPlan})`;
-      return `<span class="vtree-chip ${cCls} tnode" data-plan="${escAttr(thisPlan)}" data-group="${escAttr(c.name)}" data-label="${escAttr(cLabel)}">${c.name} <b class="vc-count">${c.count.toLocaleString()}</b></span>`;
-    }).join('');
-    return rowHtml + `<div class="vtree-chips">${chips}</div>`;
+  if (node.children && node.children.length) {
+    const nextPlan = depth === 1 ? node.name : planName;
+    html += `<ul>` + node.children.map(c => renderTreeNode(c, depth + 1, nextPlan)).join('') + `</ul>`;
   }
-  const childrenHtml = node.children.map(c => renderVerticalNode(c, depth + 1, depth === 1 ? node.name : planName)).join('');
-  return rowHtml + `<div class="vtree-children">${childrenHtml}</div>`;
+  html += `</li>`;
+  return html;
 }
 
 async function loadTree() {
@@ -814,8 +816,8 @@ async function loadTree() {
       return;
     }
     const rootNode = { name: 'Total', count: d.total, children: d.children };
-    el.innerHTML = renderVerticalNode(rootNode, 0, null);
-    el.querySelectorAll('.tnode').forEach(node => {
+    el.innerHTML = `<div class="tree"><ul>${renderTreeNode(rootNode, 0, null)}</ul></div>`;
+    el.querySelectorAll('.tree-node').forEach(node => {
       node.addEventListener('click', () => {
         openTreeDetail(node.dataset.plan || '', node.dataset.group || '', node.dataset.label || '');
       });
@@ -825,7 +827,10 @@ async function loadTree() {
   }
 }
 
+let currentTreeContext = { plan: '', group: '', label: '' };
+
 async function openTreeDetail(plan, group, label) {
+  currentTreeContext = { plan, group, label };
   document.getElementById('modalTitle').textContent = label;
   document.getElementById('modalBody').innerHTML = '<div class="loading"><span class="pulse"></span> Memuat...</div>';
   document.getElementById('treeModal').classList.add('active');
@@ -848,16 +853,80 @@ async function openTreeDetail(plan, group, label) {
       : `${d.total.toLocaleString()} data`;
     document.getElementById('modalBody').innerHTML = `
       <p style="color:var(--text2);font-size:12px;margin-bottom:.75rem;">${info}</p>
-      <table class="data-table"><thead><tr><th>Site ID</th><th>Site Name</th><th>Witel</th><th>Status</th></tr></thead>
+      <table class="data-table"><thead><tr><th>Site ID</th><th>Site Name</th><th>Witel</th><th>Status</th><th>Aksi</th></tr></thead>
       <tbody>` + d.rows.map(row => `
         <tr>
-          <td onclick="closeTreeModal();searchSite('${row.site_id}')">${row.site_id}</td>
+          <td>${row.site_id}</td>
           <td>${row.site_name}</td>
           <td style="color:var(--text2);">${row.witel}</td>
           <td>${statusBadge(row.status)}</td>
+          <td><button class="edit-btn" onclick="openTreeEdit('${escAttr(row.site_id)}')">✏️ Edit</button></td>
         </tr>`).join('') + `</tbody></table>`;
   } catch (e) {
     document.getElementById('modalBody').innerHTML = '<div class="error-msg">❌ Gagal memuat data.</div>';
+  }
+}
+
+function backToTreeList() {
+  openTreeDetail(currentTreeContext.plan, currentTreeContext.group, currentTreeContext.label);
+}
+
+function afterTreeEditSave() {
+  setTimeout(backToTreeList, 1200);
+}
+
+async function openTreeEdit(siteCode) {
+  document.getElementById('modalTitle').textContent = `Edit: ${siteCode}`;
+  document.getElementById('modalBody').innerHTML = '<div class="loading"><span class="pulse"></span> Memuat data site...</div>';
+  try {
+    const r = await fetch('/api/search?q=' + encodeURIComponent(siteCode));
+    const d = await r.json();
+    if (!d.found) {
+      document.getElementById('modalBody').innerHTML = `
+        <button class="back-btn" onclick="backToTreeList()">← Kembali ke daftar</button>
+        <div class="error-msg">❌ Site tidak ditemukan.</div>`;
+      return;
+    }
+    const data = d.data;
+    document.getElementById('modalBody').innerHTML = `
+      <button class="back-btn" onclick="backToTreeList()">← Kembali ke daftar</button>
+      <div class="result-grid">
+        <div class="result-field"><div class="field-label">Site</div><div class="field-value">${data.site_id}</div></div>
+        <div class="result-field"><div class="field-label">Sub Sistem</div><div class="field-value">${data.sub_sistem}</div></div>
+        <div class="result-field"><div class="field-label">Witel</div><div class="field-value">${data.witel}</div></div>
+        <div class="result-field"><div class="field-label">Status Pekerjaan</div><div class="field-value">${data.status}</div></div>
+      </div>
+      <div class="update-form">
+        <div class="update-form-title">Update Status & Catatan</div>
+        <select id="updateStatus">
+          <option value="">-- Pilih status --</option>
+          <option value="0. HOLD">0. HOLD</option>
+          <option value="0.1 Proposed Drop">0.1 Proposed Drop</option>
+          <option value="0.2 L0 Drop">0.2 L0 Drop</option>
+          <option value="0.3 Drop MoM">0.3 Drop MoM</option>
+          <option value="1. L0 Survey">1. L0 Survey</option>
+          <option value="1.1 Done Survey">1.1 Done Survey</option>
+          <option value="2. L0 DRM">2. L0 DRM</option>
+          <option value="3. L0 Progress Perizinan">3. L0 Progress Perizinan</option>
+          <option value="4. L0 Material Delivery">4. L0 Material Delivery</option>
+          <option value="5.0 L0 Progress FO">5.0 L0 Progress FO</option>
+          <option value="6. L0 Ready">6. L0 Ready</option>
+          <option value="7. L1 Ready">7. L1 Ready</option>
+          <option value="7. L3. OA Confirmation">7. L3. OA Confirmation</option>
+          <option value="5.1 L0 Progress - Issue BTS">5.1 L0 Progress - Issue BTS</option>
+          <option value="0.1 Need Confirm by Tsel">0.1 Need Confirm by Tsel</option>
+          <option value="0.2 Confirmed Batal by Tsel">0.2 Confirmed Batal by Tsel</option>
+        </select>
+        <div class="note-block">
+          <textarea id="updateNote" placeholder="Contoh: 02/08/2026 : keterangan baru"></textarea>
+        </div>
+        <button onclick="submitUpdate('${escAttr(data.site_id)}', afterTreeEditSave)">Simpan Perubahan</button>
+        <div id="updateMessage" class="hint">Catatan akan ditambahkan ke atas dengan format tanggal otomatis. Setelah tersimpan akan kembali ke daftar.</div>
+      </div>`;
+  } catch (e) {
+    document.getElementById('modalBody').innerHTML = `
+      <button class="back-btn" onclick="backToTreeList()">← Kembali ke daftar</button>
+      <div class="error-msg">❌ Gagal menghubungi server.</div>`;
   }
 }
 
