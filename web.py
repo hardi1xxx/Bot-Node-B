@@ -263,24 +263,33 @@ def build_tree_data(df):
         count_plan = int(mask.sum())
         statuses_here = sub_status[mask]
 
-        group_counts = {}
-        for raw in statuses_here:
-            ns = _norm_status(raw)
-            if not ns or ns == "NAN":
-                key = "Lainnya"
-            elif ns in HOLD_STATUSES:
-                key = "Hold"
-            elif ns in L1_ONAIR_STATUSES:
-                key = "L1 - On Air"
-            elif ns in DROP_MOM_STATUSES:
-                key = "Drop MOM"
-            else:
-                key = raw.strip()
-            group_counts[key] = group_counts.get(key, 0) + 1
+        children = []
+        if plan_name.strip().upper() == "TIF":
+            l1_count = 0
+            drop_count = 0
+            ny_group_counts = {}
+            for raw in statuses_here:
+                ns = _norm_status(raw)
+                if ns in L1_ONAIR_STATUSES:
+                    l1_count += 1
+                elif ns in DROP_MOM_STATUSES:
+                    drop_count += 1
+                else:
+                    if not ns or ns == "NAN":
+                        continue  # kosong, tidak ditampilkan
+                    key = "Hold" if ns in HOLD_STATUSES else raw.strip()
+                    ny_group_counts[key] = ny_group_counts.get(key, 0) + 1
 
-        children = [{"name": k, "count": v} for k, v in
-                    sorted(group_counts.items(), key=lambda kv: -kv[1])
-                    if k != "Lainnya"]
+            ny_children = [{"name": k, "count": v} for k, v in
+                            sorted(ny_group_counts.items(), key=lambda kv: -kv[1])]
+            ny_total = sum(ny_group_counts.values())
+
+            children = [
+                {"name": "L1 - On Air", "count": l1_count},
+                {"name": "NY On Air", "count": ny_total, "children": ny_children},
+                {"name": "Drop MOM", "count": drop_count},
+            ]
+
         branches.append({"name": plan_name, "count": count_plan, "children": children})
 
     branches.sort(key=lambda b: -b["count"])
@@ -319,6 +328,8 @@ def api_tree_list():
                 return ns in L1_ONAIR_STATUSES
             if group == "Drop MOM":
                 return ns in DROP_MOM_STATUSES
+            if group == "NY On Air":
+                return bool(ns) and ns != "NAN" and ns not in L1_ONAIR_STATUSES and ns not in DROP_MOM_STATUSES
             return ns == _norm_status(group)
         status_col_sub = sub.iloc[:, 20].astype(str)
         sub = sub[status_col_sub.apply(matches)]
@@ -337,6 +348,7 @@ def api_tree_list():
         })
 
     return jsonify({"total": len(rows), "rows": rows[:500]})
+
 
 
 HTML = r"""<!DOCTYPE html>
@@ -483,6 +495,8 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 .tree-node.stat-onair .tn-value{color:var(--green);}
 .tree-node.stat-drop{border-color:var(--orange);}
 .tree-node.stat-drop .tn-value{color:var(--orange);}
+.tree-node.stat-nyonair{border-color:var(--accent);}
+.tree-node.stat-nyonair .tn-value{color:var(--accent);}
 .tree-node.stat-default{border-color:var(--border2);}
 .tree-node.stat-default .tn-value{color:var(--text2);}
 
@@ -754,31 +768,33 @@ function escAttr(s) {
   return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function treeNodeClass(level, name) {
-  if (level === 0) return 'tree-node root';
-  if (level === 1) return 'tree-node plan';
+function treeNodeClass(depth, name) {
+  if (depth === 0) return 'tree-node root';
+  if (depth === 1) return 'tree-node plan';
   const n = (name || '').toUpperCase();
   if (n === 'HOLD') return 'tree-node stat-hold';
   if (n === 'L1 - ON AIR') return 'tree-node stat-onair';
   if (n === 'DROP MOM') return 'tree-node stat-drop';
+  if (n === 'NY ON AIR') return 'tree-node stat-nyonair';
   return 'tree-node stat-default';
 }
 
-function renderTreeNode(node, level, parentPlan) {
-  const cls = treeNodeClass(level, node.name);
-  const label = level === 0 ? 'Site ID' : (level === 1 ? 'Plan Deploy' : '');
-  const dataPlan = level === 0 ? '' : (level === 1 ? node.name : parentPlan);
-  const dataGroup = level === 2 ? node.name : '';
-  const modalLabel = level === 0 ? 'Total Semua Site'
-    : level === 1 ? `Plan Deploy: ${node.name}`
-    : `${node.name} (Plan Deploy: ${parentPlan})`;
-  let html = `<li><div class="${cls}" data-plan="${escAttr(dataPlan)}" data-group="${escAttr(dataGroup)}" data-label="${escAttr(modalLabel)}">
+function renderTreeNode(node, depth, planName) {
+  const cls = treeNodeClass(depth, node.name);
+  const label = depth === 0 ? 'Site ID' : (depth === 1 ? 'Plan Deploy' : '');
+  const thisPlan = depth === 0 ? '' : (depth === 1 ? node.name : planName);
+  const thisGroup = depth >= 2 ? node.name : '';
+  const modalLabel = depth === 0 ? 'Total Semua Site'
+    : depth === 1 ? `Plan Deploy: ${node.name}`
+    : `${node.name} (Plan Deploy: ${thisPlan})`;
+  let html = `<li><div class="${cls}" data-plan="${escAttr(thisPlan)}" data-group="${escAttr(thisGroup)}" data-label="${escAttr(modalLabel)}">
       ${label ? `<div class="tn-label">${label}</div>` : ''}
       <div class="tn-name">${node.name}</div>
       <div class="tn-value">${node.count.toLocaleString()}</div>
     </div>`;
   if (node.children && node.children.length) {
-    html += `<ul>` + node.children.map(c => renderTreeNode(c, level + 1, level === 1 ? node.name : parentPlan)).join('') + `</ul>`;
+    const nextPlan = depth === 1 ? node.name : planName;
+    html += `<ul>` + node.children.map(c => renderTreeNode(c, depth + 1, nextPlan)).join('') + `</ul>`;
   }
   html += `</li>`;
   return html;
