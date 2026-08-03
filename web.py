@@ -467,15 +467,15 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 .pulse{display:inline-block;width:8px;height:8px;background:var(--accent);border-radius:50%;animation:pulse 1s ease-in-out infinite;}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(.8);}}
 
-/* TREE DIAGRAM (vertical, top-to-bottom, indented box-style cards) */
-.tree-diagram{overflow-x:auto;padding:1rem 0;}
-.tree-list{list-style:none;margin:0;padding-left:0;}
-.tree-list li{position:relative;padding:8px 0;}
-.tree-list ul.tree-list{margin-left:34px;margin-top:4px;padding-left:26px;position:relative;}
-.tree-list ul.tree-list > li{position:relative;padding:8px 0;}
-.tree-list ul.tree-list > li::before{content:'';position:absolute;left:-26px;top:0;bottom:50%;width:26px;border-left:2px solid var(--border2);border-bottom:2px solid var(--border2);border-radius:0 0 0 8px;}
-.tree-list ul.tree-list > li::after{content:'';position:absolute;left:-26px;top:50%;bottom:0;border-left:2px solid var(--border2);}
-.tree-list ul.tree-list > li:last-child::after{display:none;}
+/* TREE DIAGRAM (fan-out: root centered, children cascade down + slightly right) */
+.tree-diagram{overflow-x:auto;overflow-y:auto;padding:1rem 0;}
+.node-group{display:flex;align-items:center;}
+.node-children{display:flex;flex-direction:column;margin-left:28px;position:relative;}
+.node-children::before{content:'';position:absolute;left:-28px;top:50%;width:28px;height:2px;background:var(--border2);}
+.node-child{position:relative;padding:6px 0;}
+.node-child::before{content:'';position:absolute;left:-28px;top:0;bottom:50%;width:28px;border-left:2px solid var(--border2);border-bottom:2px solid var(--border2);border-radius:0 0 0 8px;}
+.node-child::after{content:'';position:absolute;left:-28px;top:50%;bottom:0;border-left:2px solid var(--border2);}
+.node-child:last-child::after{display:none;}
 .tree-node{display:inline-block;background:var(--card-bg);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px 16px;min-width:150px;text-align:center;cursor:pointer;transition:transform .15s,border-color .15s;}
 .tree-node:hover{transform:translateY(-2px);border-color:var(--accent);}
 .tree-node .tn-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;}
@@ -788,17 +788,17 @@ function renderTreeNode(node, depth, planName) {
   const modalLabel = depth === 0 ? 'Total Semua Site'
     : depth === 1 ? `Plan Deploy: ${node.name}`
     : `${node.name} (Plan Deploy: ${thisPlan})`;
-  let html = `<li><div class="${cls}" data-plan="${escAttr(thisPlan)}" data-group="${escAttr(thisGroup)}" data-label="${escAttr(modalLabel)}">
+  const boxHtml = `<div class="${cls}" data-plan="${escAttr(thisPlan)}" data-group="${escAttr(thisGroup)}" data-label="${escAttr(modalLabel)}">
       ${label ? `<div class="tn-label">${label}</div>` : ''}
       <div class="tn-name">${node.name}</div>
       <div class="tn-value">${node.count.toLocaleString()}</div>
     </div>`;
-  if (node.children && node.children.length) {
-    const nextPlan = depth === 1 ? node.name : planName;
-    html += `<ul class="tree-list">` + node.children.map(c => renderTreeNode(c, depth + 1, nextPlan)).join('') + `</ul>`;
+  if (!node.children || !node.children.length) {
+    return `<div class="node-group">${boxHtml}</div>`;
   }
-  html += `</li>`;
-  return html;
+  const nextPlan = depth === 1 ? node.name : planName;
+  const childrenHtml = node.children.map(c => `<div class="node-child">${renderTreeNode(c, depth + 1, nextPlan)}</div>`).join('');
+  return `<div class="node-group">${boxHtml}<div class="node-children">${childrenHtml}</div></div>`;
 }
 
 async function loadTree() {
@@ -812,7 +812,7 @@ async function loadTree() {
       return;
     }
     const rootNode = { name: 'Total', count: d.total, children: d.children };
-    el.innerHTML = `<ul class="tree-list">${renderTreeNode(rootNode, 0, null)}</ul>`;
+    el.innerHTML = renderTreeNode(rootNode, 0, null);
     el.querySelectorAll('.tree-node').forEach(node => {
       node.addEventListener('click', () => {
         openTreeDetail(node.dataset.plan || '', node.dataset.group || '', node.dataset.label || '');
