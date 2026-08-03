@@ -4,6 +4,7 @@ import pandas as pd
 import os
 import json
 import time
+from pathlib import Path
 from google.oauth2.service_account import Credentials
 
 app = Flask(__name__)
@@ -18,6 +19,39 @@ SHEET_CLIENT_TTL = 1800  # re-authorize setiap 30 menit supaya token tidak basi
 
 SPREADSHEET_ID = "1h1NBs7k4rCibwFvNVu9t0rIlq-TuF7sh6YZvxhu9VqQ"
 NAMA_SHEET = "All Node B"
+ALLOWED_TELEGRAM_IDS_FILE = os.getenv(
+    "ALLOWED_TELEGRAM_IDS_FILE",
+    str(Path(__file__).resolve().parent / "allowed_telegram_ids.txt")
+)
+
+
+def load_allowed_telegram_ids(path=None):
+    file_path = Path(path or ALLOWED_TELEGRAM_IDS_FILE).expanduser()
+    if not file_path.exists():
+        return []
+    try:
+        with open(file_path, "r", encoding="utf-8") as handle:
+            ids = []
+            for raw_line in handle:
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                try:
+                    ids.append(int(line))
+                except ValueError:
+                    print(f"⚠️ ID Telegram tidak valid di {file_path}: {line}")
+            return ids
+    except Exception as e:
+        print(f"⚠️ Gagal membaca daftar ID Telegram dari {file_path}: {e}")
+        return []
+
+
+def is_telegram_user_allowed(user_id, path=None):
+    try:
+        normalized_id = int(str(user_id).strip())
+    except (TypeError, ValueError):
+        return False
+    return normalized_id in load_allowed_telegram_ids(path)
 
 
 def get_sheet(force_refresh=False):
@@ -70,9 +104,15 @@ def get_sheet_data():
         print(f"ERROR: {e}")
         return None
 
+@app.route("/api/check_edit_access")
+def api_check_edit_access():
+    telegram_user_id = request.args.get("telegram_user_id", "").strip()
+    return jsonify({"allowed": is_telegram_user_allowed(telegram_user_id)})
+
 @app.route("/api/search")
 def api_search():
     query = request.args.get("q", "").strip().upper()
+    telegram_user_id = request.args.get("telegram_user_id", "").strip()
     if not query:
         return jsonify({"error": "Query kosong"}), 400
     df = get_sheet_data()
@@ -95,6 +135,7 @@ def api_search():
         note_text = ""
     return jsonify({
         "found": True,
+        "edit_allowed": is_telegram_user_allowed(telegram_user_id),
         "data": {
             "site_id": f"{safe(4)}-{safe(7)}",
             "plan_deploy": safe(1),
@@ -119,6 +160,12 @@ def api_update_status():
     site_id = str(data.get("site_id", "")).strip()
     status = str(data.get("status", "")).strip()
     note = str(data.get("note", "")).strip()
+    telegram_user_id = str(data.get("telegram_user_id", "")).strip()
+    if not is_telegram_user_allowed(telegram_user_id):
+        return jsonify({
+            "success": False,
+            "error": "Anda tidak memiliki izin edit. Hanya user Telegram tertentu yang dapat mengubah status."
+        }), 403
     if not site_id:
         return jsonify({"success": False, "error": "Site ID kosong"}), 400
     if not status:
@@ -687,6 +734,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 let currentPage = 1;
 let dashboardLoaded = false;
 let tableLoaded = false;
+let telegramUserId = '';
 
 function showPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -711,9 +759,16 @@ async function doSearch() {
   const q = document.getElementById('searchInput').value.trim();
   if (!q) return;
   const el = document.getElementById('searchResult');
+  const userId = prompt('Masukkan ID Telegram Anda untuk mengakses fitur edit:', telegramUserId || '');
+  if (userId !== null) {
+    telegramUserId = userId.trim();
+  }
+  if (!telegramUserId) {
+    telegramUserId = '';
+  }
   el.innerHTML = '<div class="loading"><span class="pulse"></span> Mencari...</div>';
   try {
-    const r = await fetch('/api/search?q=' + encodeURIComponent(q));
+    const r = await fetch('/api/search?q=' + encodeURIComponent(q) + '&telegram_user_id=' + encodeURIComponent(telegramUserId));
     const d = await r.json();
     if (!d.found) {
       el.innerHTML = `<div class="error-msg">❌ Site ID "<strong>${q}</strong>" tidak ditemukan dalam data.</div>`;
@@ -721,27 +776,7 @@ async function doSearch() {
     }
     const data = d.data;
     const currentNote = data.note ? data.note.replace(/\n/g, '<br>') : '-';
-    el.innerHTML = `
-    <div class="result-card">
-      <div class="result-header">
-        <div class="result-site-id">📡 ${data.site_id}</div>
-        ${statusBadge(data.status)}
-      </div>
-      <div class="result-grid">
-        <div class="result-field"><div class="field-label">Plan Deploy</div><div class="field-value">${data.plan_deploy}</div></div>
-        <div class="result-field"><div class="field-label">Sub Sistem</div><div class="field-value">${data.sub_sistem}</div></div>
-        <div class="result-field"><div class="field-label">Witel</div><div class="field-value">${data.witel}</div></div>
-        <div class="result-field"><div class="field-label">STO</div><div class="field-value">${data.sto}</div></div>
-        <div class="result-field"><div class="field-label">Status Pekerjaan</div><div class="field-value">${data.status}</div></div>
-        <div class="result-field"><div class="field-label">Catuan</div><div class="field-value">${data.catuan}</div></div>
-        <div class="result-field"><div class="field-label">Panjang Kabel</div><div class="field-value">${data.panjang_kabel}</div></div>
-        <div class="result-field"><div class="field-label">Jenis Kabel</div><div class="field-value">${data.jenis_kabel}</div></div>
-        <div class="result-field"><div class="field-label">Tiang</div><div class="field-value">${data.tiang}</div></div>
-        <div class="result-field"><div class="field-label">Nilai BoQ (Survey)</div><div class="field-value">${data.boq}</div></div>
-        <div class="result-field"><div class="field-label">New TA Area</div><div class="field-value">${data.ta_area}</div></div>
-        <div class="result-field"><div class="field-label">New Infra / Fiberization</div><div class="field-value">${data.infra}</div></div>
-        <div class="result-field full"><div class="field-label">Catatan Kolom V</div><div class="field-value">${currentNote}</div></div>
-      </div>
+    const editFormHtml = d.edit_allowed ? `
       <div class="update-form">
         <div class="update-form-title">Update Status & Catatan</div>
         <select id="updateStatus">
@@ -768,7 +803,29 @@ async function doSearch() {
         </div>
         <button onclick="submitUpdate('${data.site_id}')">Simpan Perubahan</button>
         <div id="updateMessage" class="hint">Catatan akan ditambahkan ke atas dengan format tanggal otomatis.</div>
+      </div>` : `<div class="update-form"><div class="update-form-title">Mode Monitoring</div><div class="hint">Anda hanya dapat melihat data. Edit dibatasi untuk user Telegram tertentu yang terdaftar.</div></div>`;
+    el.innerHTML = `
+    <div class="result-card">
+      <div class="result-header">
+        <div class="result-site-id">📡 ${data.site_id}</div>
+        ${statusBadge(data.status)}
       </div>
+      <div class="result-grid">
+        <div class="result-field"><div class="field-label">Plan Deploy</div><div class="field-value">${data.plan_deploy}</div></div>
+        <div class="result-field"><div class="field-label">Sub Sistem</div><div class="field-value">${data.sub_sistem}</div></div>
+        <div class="result-field"><div class="field-label">Witel</div><div class="field-value">${data.witel}</div></div>
+        <div class="result-field"><div class="field-label">STO</div><div class="field-value">${data.sto}</div></div>
+        <div class="result-field"><div class="field-label">Status Pekerjaan</div><div class="field-value">${data.status}</div></div>
+        <div class="result-field"><div class="field-label">Catuan</div><div class="field-value">${data.catuan}</div></div>
+        <div class="result-field"><div class="field-label">Panjang Kabel</div><div class="field-value">${data.panjang_kabel}</div></div>
+        <div class="result-field"><div class="field-label">Jenis Kabel</div><div class="field-value">${data.jenis_kabel}</div></div>
+        <div class="result-field"><div class="field-label">Tiang</div><div class="field-value">${data.tiang}</div></div>
+        <div class="result-field"><div class="field-label">Nilai BoQ (Survey)</div><div class="field-value">${data.boq}</div></div>
+        <div class="result-field"><div class="field-label">New TA Area</div><div class="field-value">${data.ta_area}</div></div>
+        <div class="result-field"><div class="field-label">New Infra / Fiberization</div><div class="field-value">${data.infra}</div></div>
+        <div class="result-field full"><div class="field-label">Catatan Kolom V</div><div class="field-value">${currentNote}</div></div>
+      </div>
+      ${editFormHtml}
     </div>`;
   } catch(e) {
     el.innerHTML = '<div class="error-msg">❌ Gagal menghubungi server.</div>';
@@ -792,7 +849,7 @@ async function submitUpdate(siteId, onSuccess) {
     const r = await fetch('/api/update_status', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({site_id: siteId, status, note})
+      body: JSON.stringify({site_id: siteId, status, note, telegram_user_id: telegramUserId})
     });
     const d = await r.json();
     if (d.success) {
@@ -826,7 +883,7 @@ async function loadDashboard() {
         <td style="cursor:pointer;color:var(--accent);" onclick="searchSite('${row.site_id}')">${row.site_id}</td>
         <td style="color:var(--text2);">${row.witel}</td>
         <td>${statusBadge(row.status)}</td>
-        <td><button class="edit-btn" onclick="openDashboardEdit('${escAttr(row.site_id)}')">✏️ Edit</button></td>
+        <td>${telegramUserId ? `<button class="edit-btn" onclick="openDashboardEdit('${escAttr(row.site_id)}')">✏️ Edit</button>` : '<span style="color:var(--text3);">Monitor only</span>'}</td>
       </tr>`).join('');
   } catch(e) {
     document.getElementById('dashLastUpdate').textContent = 'Gagal memuat data.';
@@ -949,7 +1006,7 @@ async function openTreeDetail(plan, group, label) {
           <td>${row.site_name}</td>
           <td style="color:var(--text2);">${row.witel}</td>
           <td>${statusBadge(row.status)}</td>
-          <td><button class="edit-btn" onclick="openTreeEdit('${escAttr(row.site_id)}')">✏️ Edit</button></td>
+          <td>${telegramUserId ? `<button class="edit-btn" onclick="openTreeEdit('${escAttr(row.site_id)}')">✏️ Edit</button>` : '<span style="color:var(--text3);">Monitor only</span>'}</td>
         </tr>`).join('') + `</tbody></table>`;
   } catch (e) {
     document.getElementById('modalBody').innerHTML = '<div class="error-msg">❌ Gagal memuat data.</div>';

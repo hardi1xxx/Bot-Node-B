@@ -1,0 +1,4 @@
+# Daftar user ID Telegram yang boleh edit.
+# Tambahkan atau kurangi ID satu per baris.
+# Contoh:
+# 123456789
