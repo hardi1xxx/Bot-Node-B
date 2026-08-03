@@ -165,9 +165,16 @@ def api_dashboard():
             site_id = str(row.iloc[4]).strip()
             status = str(row.iloc[20]).strip()
             witel = str(row.iloc[5]).strip()
-            if site_id and site_id != "nan" and status and status != "nan":
-                recent.append({"site_id": site_id, "status": status, "witel": witel})
-        except:
+            plan = str(row.iloc[1]).strip()
+            if not site_id or site_id.lower() == "nan":
+                continue
+            if plan.strip().upper() != "TIF":
+                continue
+            ns = _norm_status(status)
+            if not ns or ns == "NAN" or ns in L1_ONAIR_STATUSES or ns in DROP_MOM_STATUSES:
+                continue
+            recent.append({"site_id": site_id, "status": status, "witel": witel})
+        except Exception:
             continue
         if len(recent) >= 50:
             break
@@ -450,7 +457,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 .filter-bar input,.filter-bar select{padding:8px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);font-size:13px;font-family:'Inter',sans-serif;outline:none;}
 .filter-bar input:focus,.filter-bar select:focus{border-color:var(--accent);}
 .filter-bar select option{background:var(--bg2);}
-.data-table-wrap{background:var(--card-bg);border:1px solid var(--border2);border-radius:var(--radius);overflow:hidden;}
+.data-table-wrap{background:var(--card-bg);border:1px solid var(--border2);border-radius:var(--radius);overflow-x:auto;}
 .data-table{width:100%;border-collapse:collapse;font-size:13px;}
 .data-table th{padding:10px 14px;background:var(--bg3);color:var(--text3);text-align:left;font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;}
 .data-table td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text);}
@@ -515,6 +522,49 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 .edit-btn:hover{background:var(--accent);color:#0A0F1E;}
 .back-btn{padding:.5rem .9rem;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);border-radius:var(--radius-sm);font-size:12px;cursor:pointer;margin-bottom:.85rem;}
 .back-btn:hover{border-color:var(--accent);color:var(--text);}
+
+/* ===== MOBILE RESPONSIVE ===== */
+@media (max-width: 768px) {
+  .navbar{padding:0 1rem;height:52px;}
+  .logo{font-size:1rem;}
+  .nav-tabs{gap:2px;overflow-x:auto;max-width:60vw;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+  .nav-tabs::-webkit-scrollbar{display:none;}
+  .nav-tab{padding:6px 10px;font-size:12px;white-space:nowrap;}
+  .page{padding:1rem;}
+  .hero{padding:2rem 1rem 1.5rem;}
+  .hero h1{font-size:1.6rem;}
+  .hero p{font-size:.85rem;margin-bottom:1.25rem;}
+  .search-wrap{max-width:100%;}
+  .search-radar{display:none;}
+  .search-box{padding:.85rem 1rem .85rem 2.6rem;font-size:1rem;}
+  .search-icon{left:.85rem;}
+  .search-btn{width:100%;padding:.85rem;}
+  .stats-grid{grid-template-columns:repeat(2,1fr);gap:10px;}
+  .stat-card{padding:1rem;}
+  .stat-value{font-size:1.5rem;}
+  .result-grid{grid-template-columns:1fr 1fr;gap:8px;}
+  .result-card{padding:1rem;}
+  .filter-bar{gap:8px;}
+  .filter-bar input,.filter-bar select{flex:1 1 45%;font-size:12px;padding:8px 10px;}
+  .data-table th,.data-table td{padding:8px 10px;font-size:12px;}
+  .recent-table th,.recent-table td{padding:8px 10px;font-size:12px;}
+  .pagination{flex-direction:column;gap:8px;align-items:flex-start;}
+  .tree-diagram{max-height:calc(100vh - 170px);padding:.5rem 0;}
+  .tree-node{padding:6px 10px;min-width:105px;}
+  .tree-node .tn-name{font-size:11px;}
+  .tree-node .tn-value{font-size:.95rem;}
+  .tree-node.leaf-box{min-width:82px;padding:4px 7px;}
+  .node-children{margin-left:16px;}
+  .node-children::before{left:-16px;width:16px;}
+  .node-child::before,.node-child::after{left:-16px;}
+  .node-child::before{width:16px;}
+  .leaf-grid{margin-left:16px;padding-left:14px;max-width:100%;}
+  .leaf-grid::before{left:-14px;width:14px;}
+  .modal-overlay{padding:.75rem;}
+  .modal-box{max-width:100%;max-height:88vh;}
+  .modal-header{padding:.85rem 1rem;}
+  .modal-body{padding:.85rem 1rem;}
+}
 </style>
 </head>
 <body>
@@ -525,7 +575,6 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
     <button class="nav-tab active" onclick="showPage('search')">🔍 Cari Site</button>
     <button class="nav-tab" onclick="showPage('dashboard')">📊 Dashboard</button>
     <button class="nav-tab" onclick="showPage('table')">📋 Semua Data</button>
-    <button class="nav-tab" onclick="showPage('tree')">🌳 Tree Diagram</button>
   </div>
 </nav>
 
@@ -561,11 +610,13 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
     <div class="stat-card orange"><div class="stat-label">On Progress</div><div class="stat-value" id="statProgress"><span class="pulse"></span></div></div>
     <div class="stat-card green"><div class="stat-label">Done</div><div class="stat-value" id="statDone"><span class="pulse"></span></div></div>
   </div>
-  <div class="section-title">Data Site Terbaru</div>
+  <p style="color:var(--text2);font-size:12px;margin:1rem 0 .5rem;">Total Site → Plan Deploy → Status Pekerjaan. Klik kotak untuk lihat daftar datanya.</p>
+  <div id="treeContainer" class="tree-diagram"></div>
+  <div class="section-title" style="margin-top:1.5rem;">Data Site Terbaru (NY On Air)</div>
   <div class="data-table-wrap">
     <table class="recent-table">
-      <thead><tr><th>Site ID</th><th>Witel</th><th>Status</th></tr></thead>
-      <tbody id="recentBody"><tr><td colspan="3" class="loading"><span class="pulse"></span> Memuat...</td></tr></tbody>
+      <thead><tr><th>Site ID</th><th>Witel</th><th>Status</th><th>Aksi</th></tr></thead>
+      <tbody id="recentBody"><tr><td colspan="4" class="loading"><span class="pulse"></span> Memuat...</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -597,14 +648,6 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
   </div>
 </div>
 
-<!-- TREE DIAGRAM PAGE -->
-<div id="page-tree" class="page">
-  <div style="margin-bottom:.75rem;">
-    <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.3rem;font-weight:700;">Tree Diagram Progress</h2>
-    <p style="color:var(--text2);font-size:12px;margin-top:2px;">Total Site → Plan Deploy → Status Pekerjaan. Klik kotak untuk lihat daftar datanya.</p>
-  </div>
-  <div id="treeContainer" class="tree-diagram"></div>
-</div>
 
 <!-- MODAL DETAIL -->
 <div id="treeModal" class="modal-overlay" onclick="if(event.target===this) closeTreeModal()">
@@ -621,16 +664,14 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 let currentPage = 1;
 let dashboardLoaded = false;
 let tableLoaded = false;
-let treeLoaded = false;
 
 function showPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
   event.target.classList.add('active');
-  if (name === 'dashboard' && !dashboardLoaded) { loadDashboard(); dashboardLoaded = true; }
+  if (name === 'dashboard' && !dashboardLoaded) { loadDashboard(); loadTree(); dashboardLoaded = true; }
   if (name === 'table' && !tableLoaded) { loadTable(1); tableLoaded = true; }
-  if (name === 'tree' && !treeLoaded) { loadTree(); treeLoaded = true; }
 }
 
 function statusBadge(s) {
@@ -753,15 +794,26 @@ async function loadDashboard() {
     document.getElementById('statDone').textContent = d.done.toLocaleString();
     document.getElementById('dashLastUpdate').textContent = 'Data diperbarui: ' + new Date().toLocaleString('id-ID');
     const tbody = document.getElementById('recentBody');
+    if (!d.recent.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="loading">Tidak ada data.</td></tr>';
+      return;
+    }
     tbody.innerHTML = d.recent.map(row => `
       <tr>
         <td style="cursor:pointer;color:var(--accent);" onclick="searchSite('${row.site_id}')">${row.site_id}</td>
         <td style="color:var(--text2);">${row.witel}</td>
         <td>${statusBadge(row.status)}</td>
+        <td><button class="edit-btn" onclick="openDashboardEdit('${escAttr(row.site_id)}')">✏️ Edit</button></td>
       </tr>`).join('');
   } catch(e) {
     document.getElementById('dashLastUpdate').textContent = 'Gagal memuat data.';
   }
+}
+
+function openDashboardEdit(siteCode) {
+  currentTreeContext = { plan: 'TIF', group: 'NY On Air', label: 'NY On Air (Plan Deploy: TIF)' };
+  document.getElementById('treeModal').classList.add('active');
+  openTreeEdit(siteCode);
 }
 
 function searchSite(id) {
@@ -946,6 +998,10 @@ async function openTreeEdit(siteCode) {
 
 function closeTreeModal() {
   document.getElementById('treeModal').classList.remove('active');
+  if (document.getElementById('page-dashboard').classList.contains('active')) {
+    loadDashboard();
+    loadTree();
+  }
 }
 
 let tableTimeout;
