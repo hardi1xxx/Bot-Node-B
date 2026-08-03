@@ -467,38 +467,32 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 .pulse{display:inline-block;width:8px;height:8px;background:var(--accent);border-radius:50%;animation:pulse 1s ease-in-out infinite;}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(.8);}}
 
-/* TREE DIAGRAM (horizontal, top-down, classic connector-line style) */
-.tree-diagram{overflow-x:auto;overflow-y:hidden;padding:2rem 1rem;}
-.tree{display:inline-block;min-width:100%;}
-.tree ul{padding-top:20px;position:relative;display:flex;justify-content:center;}
-.tree li{list-style:none;text-align:center;position:relative;padding:20px 10px 0 10px;}
-.tree li::before,.tree li::after{content:'';position:absolute;top:0;right:50%;border-top:2px solid var(--border2);width:50%;height:20px;}
-.tree li::after{right:auto;left:50%;border-left:2px solid var(--border2);}
-.tree li:only-child::after,.tree li:only-child::before{display:none;}
-.tree li:only-child{padding-top:0;}
-.tree li:first-child::before,.tree li:last-child::after{border:0 none;}
-.tree li:last-child::before{border-right:2px solid var(--border2);border-radius:0 6px 0 0;}
-.tree li:first-child::after{border-radius:6px 0 0 0;}
-.tree ul ul::before{content:'';position:absolute;top:0;left:50%;border-left:2px solid var(--border2);width:0;height:20px;}
-.tree-node{display:inline-block;background:var(--card-bg);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px 16px;min-width:150px;text-align:center;cursor:pointer;transition:transform .15s,border-color .15s;}
-.tree-node:hover{transform:translateY(-2px);border-color:var(--accent);}
-.tree-node .tn-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;}
-.tree-node .tn-name{font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-top:2px;white-space:nowrap;}
-.tree-node .tn-value{font-family:'Space Grotesk',sans-serif;font-size:1.25rem;font-weight:700;margin-top:2px;}
-.tree-node.root{background:var(--bg4);border-color:var(--accent);border-width:2px;}
-.tree-node.root .tn-value{color:var(--accent);}
-.tree-node.plan{border-color:var(--accent2);}
-.tree-node.plan .tn-value{color:var(--accent);}
-.tree-node.stat-hold{border-color:var(--red);}
-.tree-node.stat-hold .tn-value{color:var(--red);}
-.tree-node.stat-onair{border-color:var(--green);}
-.tree-node.stat-onair .tn-value{color:var(--green);}
-.tree-node.stat-drop{border-color:var(--orange);}
-.tree-node.stat-drop .tn-value{color:var(--orange);}
-.tree-node.stat-nyonair{border-color:var(--accent);}
-.tree-node.stat-nyonair .tn-value{color:var(--accent);}
-.tree-node.stat-default{border-color:var(--border2);}
-.tree-node.stat-default .tn-value{color:var(--text2);}
+/* TREE DIAGRAM (compact vertical, fits one screen) */
+.tree-diagram{max-height:calc(100vh - 230px);overflow-y:auto;overflow-x:hidden;padding:.25rem 0;}
+.vtree-row{display:flex;align-items:center;gap:8px;padding:6px 12px;margin:3px 0;border-radius:var(--radius-sm);border:1px solid var(--border2);background:var(--card-bg);cursor:pointer;transition:border-color .15s;}
+.vtree-row:hover{border-color:var(--accent);}
+.vtree-row .vt-label{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;}
+.vtree-row .vt-name{font-family:'Space Grotesk',sans-serif;font-size:12.5px;font-weight:600;color:var(--text);}
+.vtree-row .vt-count{margin-left:auto;font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:700;}
+.vtree-row.root{background:var(--bg4);border-color:var(--accent);border-width:2px;}
+.vtree-row.root .vt-count{color:var(--accent);}
+.vtree-row.plan{border-left:3px solid var(--accent2);}
+.vtree-row.plan .vt-count{color:var(--accent);}
+.vtree-row.stat-hold{border-left:3px solid var(--red);}
+.vtree-row.stat-hold .vt-count{color:var(--red);}
+.vtree-row.stat-onair{border-left:3px solid var(--green);}
+.vtree-row.stat-onair .vt-count{color:var(--green);}
+.vtree-row.stat-drop{border-left:3px solid var(--orange);}
+.vtree-row.stat-drop .vt-count{color:var(--orange);}
+.vtree-row.stat-nyonair{border-left:3px solid var(--accent);}
+.vtree-row.stat-nyonair .vt-count{color:var(--accent);}
+.vtree-children{margin-left:20px;padding-left:14px;border-left:2px solid var(--border2);}
+.vtree-chips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px 20px;padding-left:14px;border-left:2px solid var(--border2);}
+.vtree-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:14px;border:1px solid var(--border2);background:var(--bg3);font-size:11px;color:var(--text2);cursor:pointer;white-space:nowrap;transition:border-color .15s;}
+.vtree-chip:hover{border-color:var(--accent);color:var(--text);}
+.vtree-chip .vc-count{font-family:'Space Grotesk',sans-serif;font-weight:700;color:var(--text);}
+.vtree-chip.stat-hold{border-color:rgba(239,68,68,.4);}
+.vtree-chip.stat-hold .vc-count{color:var(--red);}
 
 /* MODAL (klik node -> list data) */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;align-items:center;justify-content:center;padding:2rem;}
@@ -593,9 +587,9 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 
 <!-- TREE DIAGRAM PAGE -->
 <div id="page-tree" class="page">
-  <div style="margin-bottom:1.5rem;">
-    <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.4rem;font-weight:700;">Tree Diagram Progress</h2>
-    <p style="color:var(--text2);font-size:13px;margin-top:4px;">Total Site → Plan Deploy → Status Pekerjaan. Klik kotak untuk lihat daftar datanya.</p>
+  <div style="margin-bottom:.75rem;">
+    <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.3rem;font-weight:700;">Tree Diagram Progress</h2>
+    <p style="color:var(--text2);font-size:12px;margin-top:2px;">Total Site → Plan Deploy → Status Pekerjaan. Klik kotak untuk lihat daftar datanya.</p>
   </div>
   <div id="treeContainer" class="tree-diagram"></div>
 </div>
@@ -768,36 +762,45 @@ function escAttr(s) {
   return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function treeNodeClass(depth, name) {
-  if (depth === 0) return 'tree-node root';
-  if (depth === 1) return 'tree-node plan';
+function nodeColorClass(depth, name) {
+  if (depth === 0) return 'root';
+  if (depth === 1) return 'plan';
   const n = (name || '').toUpperCase();
-  if (n === 'HOLD') return 'tree-node stat-hold';
-  if (n === 'L1 - ON AIR') return 'tree-node stat-onair';
-  if (n === 'DROP MOM') return 'tree-node stat-drop';
-  if (n === 'NY ON AIR') return 'tree-node stat-nyonair';
-  return 'tree-node stat-default';
+  if (n === 'HOLD') return 'stat-hold';
+  if (n === 'L1 - ON AIR') return 'stat-onair';
+  if (n === 'DROP MOM') return 'stat-drop';
+  if (n === 'NY ON AIR') return 'stat-nyonair';
+  return 'stat-default';
 }
 
-function renderTreeNode(node, depth, planName) {
-  const cls = treeNodeClass(depth, node.name);
+function renderVerticalNode(node, depth, planName) {
+  const colorCls = nodeColorClass(depth, node.name);
   const label = depth === 0 ? 'Site ID' : (depth === 1 ? 'Plan Deploy' : '');
   const thisPlan = depth === 0 ? '' : (depth === 1 ? node.name : planName);
   const thisGroup = depth >= 2 ? node.name : '';
   const modalLabel = depth === 0 ? 'Total Semua Site'
     : depth === 1 ? `Plan Deploy: ${node.name}`
     : `${node.name} (Plan Deploy: ${thisPlan})`;
-  let html = `<li><div class="${cls}" data-plan="${escAttr(thisPlan)}" data-group="${escAttr(thisGroup)}" data-label="${escAttr(modalLabel)}">
-      ${label ? `<div class="tn-label">${label}</div>` : ''}
-      <div class="tn-name">${node.name}</div>
-      <div class="tn-value">${node.count.toLocaleString()}</div>
+
+  const rowHtml = `<div class="vtree-row ${colorCls} tnode" data-plan="${escAttr(thisPlan)}" data-group="${escAttr(thisGroup)}" data-label="${escAttr(modalLabel)}">
+      ${label ? `<span class="vt-label">${label}</span>` : ''}
+      <span class="vt-name">${node.name}</span>
+      <span class="vt-count">${node.count.toLocaleString()}</span>
     </div>`;
-  if (node.children && node.children.length) {
-    const nextPlan = depth === 1 ? node.name : planName;
-    html += `<ul>` + node.children.map(c => renderTreeNode(c, depth + 1, nextPlan)).join('') + `</ul>`;
+
+  if (!node.children || !node.children.length) return rowHtml;
+
+  const allLeaf = node.children.every(c => !c.children || !c.children.length);
+  if (allLeaf) {
+    const chips = node.children.map(c => {
+      const cCls = nodeColorClass(depth + 1, c.name);
+      const cLabel = `${c.name} (Plan Deploy: ${thisPlan})`;
+      return `<span class="vtree-chip ${cCls} tnode" data-plan="${escAttr(thisPlan)}" data-group="${escAttr(c.name)}" data-label="${escAttr(cLabel)}">${c.name} <b class="vc-count">${c.count.toLocaleString()}</b></span>`;
+    }).join('');
+    return rowHtml + `<div class="vtree-chips">${chips}</div>`;
   }
-  html += `</li>`;
-  return html;
+  const childrenHtml = node.children.map(c => renderVerticalNode(c, depth + 1, depth === 1 ? node.name : planName)).join('');
+  return rowHtml + `<div class="vtree-children">${childrenHtml}</div>`;
 }
 
 async function loadTree() {
@@ -811,8 +814,8 @@ async function loadTree() {
       return;
     }
     const rootNode = { name: 'Total', count: d.total, children: d.children };
-    el.innerHTML = `<div class="tree"><ul>${renderTreeNode(rootNode, 0, null)}</ul></div>`;
-    el.querySelectorAll('.tree-node').forEach(node => {
+    el.innerHTML = renderVerticalNode(rootNode, 0, null);
+    el.querySelectorAll('.tnode').forEach(node => {
       node.addEventListener('click', () => {
         openTreeDetail(node.dataset.plan || '', node.dataset.group || '', node.dataset.label || '');
       });
