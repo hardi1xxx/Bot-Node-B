@@ -467,19 +467,15 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 .pulse{display:inline-block;width:8px;height:8px;background:var(--accent);border-radius:50%;animation:pulse 1s ease-in-out infinite;}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(.8);}}
 
-/* TREE DIAGRAM (horizontal, top-down, classic connector-line style) */
-.tree-diagram{overflow-x:auto;overflow-y:hidden;padding:2rem 1rem;}
-.tree{display:inline-block;min-width:100%;}
-.tree ul{padding-top:20px;position:relative;display:flex;justify-content:center;}
-.tree li{list-style:none;text-align:center;position:relative;padding:20px 10px 0 10px;}
-.tree li::before,.tree li::after{content:'';position:absolute;top:0;right:50%;border-top:2px solid var(--border2);width:50%;height:20px;}
-.tree li::after{right:auto;left:50%;border-left:2px solid var(--border2);}
-.tree li:only-child::after,.tree li:only-child::before{display:none;}
-.tree li:only-child{padding-top:0;}
-.tree li:first-child::before,.tree li:last-child::after{border:0 none;}
-.tree li:last-child::before{border-right:2px solid var(--border2);border-radius:0 6px 0 0;}
-.tree li:first-child::after{border-radius:6px 0 0 0;}
-.tree ul ul::before{content:'';position:absolute;top:0;left:50%;border-left:2px solid var(--border2);width:0;height:20px;}
+/* TREE DIAGRAM (vertical, top-to-bottom, indented box-style cards) */
+.tree-diagram{overflow-x:auto;padding:1rem 0;}
+.tree-list{list-style:none;margin:0;padding-left:0;}
+.tree-list li{position:relative;padding:8px 0;}
+.tree-list ul.tree-list{margin-left:34px;margin-top:4px;padding-left:26px;position:relative;}
+.tree-list ul.tree-list > li{position:relative;padding:8px 0;}
+.tree-list ul.tree-list > li::before{content:'';position:absolute;left:-26px;top:0;bottom:50%;width:26px;border-left:2px solid var(--border2);border-bottom:2px solid var(--border2);border-radius:0 0 0 8px;}
+.tree-list ul.tree-list > li::after{content:'';position:absolute;left:-26px;top:50%;bottom:0;border-left:2px solid var(--border2);}
+.tree-list ul.tree-list > li:last-child::after{display:none;}
 .tree-node{display:inline-block;background:var(--card-bg);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px 16px;min-width:150px;text-align:center;cursor:pointer;transition:transform .15s,border-color .15s;}
 .tree-node:hover{transform:translateY(-2px);border-color:var(--accent);}
 .tree-node .tn-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;}
@@ -799,7 +795,7 @@ function renderTreeNode(node, depth, planName) {
     </div>`;
   if (node.children && node.children.length) {
     const nextPlan = depth === 1 ? node.name : planName;
-    html += `<ul>` + node.children.map(c => renderTreeNode(c, depth + 1, nextPlan)).join('') + `</ul>`;
+    html += `<ul class="tree-list">` + node.children.map(c => renderTreeNode(c, depth + 1, nextPlan)).join('') + `</ul>`;
   }
   html += `</li>`;
   return html;
@@ -816,7 +812,7 @@ async function loadTree() {
       return;
     }
     const rootNode = { name: 'Total', count: d.total, children: d.children };
-    el.innerHTML = `<div class="tree"><ul>${renderTreeNode(rootNode, 0, null)}</ul></div>`;
+    el.innerHTML = `<ul class="tree-list">${renderTreeNode(rootNode, 0, null)}</ul>`;
     el.querySelectorAll('.tree-node').forEach(node => {
       node.addEventListener('click', () => {
         openTreeDetail(node.dataset.plan || '', node.dataset.group || '', node.dataset.label || '');
