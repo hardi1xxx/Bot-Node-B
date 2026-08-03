@@ -257,6 +257,8 @@ def build_tree_data(df):
 
     branches = []
     for plan_name in sub_plan.unique().tolist():
+        if plan_name == "Lainnya":
+            continue  # tidak ditampilkan sesuai permintaan
         mask = sub_plan == plan_name
         count_plan = int(mask.sum())
         statuses_here = sub_status[mask]
@@ -277,7 +279,8 @@ def build_tree_data(df):
             group_counts[key] = group_counts.get(key, 0) + 1
 
         children = [{"name": k, "count": v} for k, v in
-                    sorted(group_counts.items(), key=lambda kv: -kv[1])]
+                    sorted(group_counts.items(), key=lambda kv: -kv[1])
+                    if k != "Lainnya"]
         branches.append({"name": plan_name, "count": count_plan, "children": children})
 
     branches.sort(key=lambda b: -b["count"])
@@ -289,6 +292,52 @@ def api_tree():
     if df is None:
         return jsonify({"error": "Gagal ambil data"}), 500
     return jsonify(build_tree_data(df))
+
+@app.route("/api/tree_list")
+def api_tree_list():
+    plan = request.args.get("plan", "").strip()
+    group = request.args.get("group", "").strip()
+    df = get_sheet_data()
+    if df is None:
+        return jsonify({"error": "Gagal ambil data"}), 500
+
+    site_col = df.iloc[:, 4].astype(str).str.strip()
+    valid_mask = (site_col != "") & (site_col.str.lower() != "nan")
+    sub = df[valid_mask].copy()
+
+    if plan:
+        plan_col_sub = sub.iloc[:, 1].astype(str).str.strip().replace("", "Lainnya")
+        plan_col_sub = plan_col_sub.where(plan_col_sub.str.lower() != "nan", "Lainnya")
+        sub = sub[plan_col_sub == plan]
+
+    if group:
+        def matches(raw):
+            ns = _norm_status(raw)
+            if group == "Hold":
+                return ns in HOLD_STATUSES
+            if group == "L1 - On Air":
+                return ns in L1_ONAIR_STATUSES
+            if group == "Drop MOM":
+                return ns in DROP_MOM_STATUSES
+            return ns == _norm_status(group)
+        status_col_sub = sub.iloc[:, 20].astype(str)
+        sub = sub[status_col_sub.apply(matches)]
+
+    rows = []
+    for _, row in sub.iterrows():
+        def safe(idx):
+            try:
+                v = row.iloc[idx]
+                return str(v) if v else "-"
+            except Exception:
+                return "-"
+        rows.append({
+            "site_id": safe(4), "site_name": safe(7), "witel": safe(5),
+            "sto": safe(6), "status": safe(20), "plan_deploy": safe(1),
+        })
+
+    return jsonify({"total": len(rows), "rows": rows[:500]})
+
 
 HTML = r"""<!DOCTYPE html>
 <html lang="id">
@@ -406,16 +455,21 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 .pulse{display:inline-block;width:8px;height:8px;background:var(--accent);border-radius:50%;animation:pulse 1s ease-in-out infinite;}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(.8);}}
 
-/* TREE DIAGRAM */
-.tree-diagram{overflow-x:auto;padding:1rem 0 2rem;}
-.tree-list{list-style:none;margin:0;padding-left:0;}
-.tree-list li{position:relative;}
-.tree-list ul.tree-list{margin-left:32px;padding-left:28px;position:relative;}
-.tree-list ul.tree-list > li{position:relative;padding:10px 0;}
-.tree-list ul.tree-list > li::before{content:'';position:absolute;left:-28px;top:0;bottom:50%;width:28px;border-left:2px solid var(--border2);border-bottom:2px solid var(--border2);border-radius:0 0 0 6px;}
-.tree-list ul.tree-list > li::after{content:'';position:absolute;left:-28px;top:50%;bottom:0;border-left:2px solid var(--border2);}
-.tree-list ul.tree-list > li:last-child::after{display:none;}
-.tree-node{display:inline-block;background:var(--card-bg);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px 18px;min-width:160px;text-align:center;}
+/* TREE DIAGRAM (horizontal, top-down, classic connector-line style) */
+.tree-diagram{overflow-x:auto;overflow-y:hidden;padding:2rem 1rem;}
+.tree{display:inline-block;min-width:100%;}
+.tree ul{padding-top:20px;position:relative;display:flex;justify-content:center;}
+.tree li{list-style:none;text-align:center;position:relative;padding:20px 10px 0 10px;}
+.tree li::before,.tree li::after{content:'';position:absolute;top:0;right:50%;border-top:2px solid var(--border2);width:50%;height:20px;}
+.tree li::after{right:auto;left:50%;border-left:2px solid var(--border2);}
+.tree li:only-child::after,.tree li:only-child::before{display:none;}
+.tree li:only-child{padding-top:0;}
+.tree li:first-child::before,.tree li:last-child::after{border:0 none;}
+.tree li:last-child::before{border-right:2px solid var(--border2);border-radius:0 6px 0 0;}
+.tree li:first-child::after{border-radius:6px 0 0 0;}
+.tree ul ul::before{content:'';position:absolute;top:0;left:50%;border-left:2px solid var(--border2);width:0;height:20px;}
+.tree-node{display:inline-block;background:var(--card-bg);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px 16px;min-width:150px;text-align:center;cursor:pointer;transition:transform .15s,border-color .15s;}
+.tree-node:hover{transform:translateY(-2px);border-color:var(--accent);}
 .tree-node .tn-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;}
 .tree-node .tn-name{font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-top:2px;white-space:nowrap;}
 .tree-node .tn-value{font-family:'Space Grotesk',sans-serif;font-size:1.25rem;font-weight:700;margin-top:2px;}
@@ -431,6 +485,16 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 .tree-node.stat-drop .tn-value{color:var(--orange);}
 .tree-node.stat-default{border-color:var(--border2);}
 .tree-node.stat-default .tn-value{color:var(--text2);}
+
+/* MODAL (klik node -> list data) */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;align-items:center;justify-content:center;padding:2rem;}
+.modal-overlay.active{display:flex;}
+.modal-box{background:var(--card-bg);border:1px solid var(--border2);border-radius:var(--radius);max-width:720px;width:100%;max-height:80vh;display:flex;flex-direction:column;animation:fadeIn .2s ease;}
+.modal-header{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem 1.25rem;border-bottom:1px solid var(--border);}
+.modal-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1.05rem;}
+.modal-close{background:transparent;border:none;color:var(--text2);font-size:1.3rem;line-height:1;cursor:pointer;padding:4px;}
+.modal-close:hover{color:var(--text);}
+.modal-body{padding:1rem 1.25rem;overflow-y:auto;}
 </style>
 </head>
 <body>
@@ -517,9 +581,20 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 <div id="page-tree" class="page">
   <div style="margin-bottom:1.5rem;">
     <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.4rem;font-weight:700;">Tree Diagram Progress</h2>
-    <p style="color:var(--text2);font-size:13px;margin-top:4px;">Total Site → Plan Deploy → Status Pekerjaan</p>
+    <p style="color:var(--text2);font-size:13px;margin-top:4px;">Total Site → Plan Deploy → Status Pekerjaan. Klik kotak untuk lihat daftar datanya.</p>
   </div>
   <div id="treeContainer" class="tree-diagram"></div>
+</div>
+
+<!-- MODAL DETAIL -->
+<div id="treeModal" class="modal-overlay" onclick="if(event.target===this) closeTreeModal()">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div id="modalTitle" class="modal-title">Detail</div>
+      <button class="modal-close" onclick="closeTreeModal()">✕</button>
+    </div>
+    <div id="modalBody" class="modal-body"></div>
+  </div>
 </div>
 
 <script>
@@ -675,29 +750,37 @@ function searchSite(id) {
   doSearch();
 }
 
-function treeNodeClass(node, isRoot) {
-  if (isRoot) return 'tree-node root';
-  if (node.children) return 'tree-node plan';
-  const n = (node.name || '').toUpperCase();
+function escAttr(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function treeNodeClass(level, name) {
+  if (level === 0) return 'tree-node root';
+  if (level === 1) return 'tree-node plan';
+  const n = (name || '').toUpperCase();
   if (n === 'HOLD') return 'tree-node stat-hold';
   if (n === 'L1 - ON AIR') return 'tree-node stat-onair';
   if (n === 'DROP MOM') return 'tree-node stat-drop';
   return 'tree-node stat-default';
 }
 
-function renderTreeNode(node, isRoot) {
-  const cls = treeNodeClass(node, isRoot);
-  const label = isRoot ? 'Site ID' : (node.children ? 'Plan Deploy' : '');
-  let html = `<div class="${cls}">
-    ${label ? `<div class="tn-label">${label}</div>` : ''}
-    <div class="tn-name">${node.name}</div>
-    <div class="tn-value">${node.count.toLocaleString()}</div>
-  </div>`;
+function renderTreeNode(node, level, parentPlan) {
+  const cls = treeNodeClass(level, node.name);
+  const label = level === 0 ? 'Site ID' : (level === 1 ? 'Plan Deploy' : '');
+  const dataPlan = level === 0 ? '' : (level === 1 ? node.name : parentPlan);
+  const dataGroup = level === 2 ? node.name : '';
+  const modalLabel = level === 0 ? 'Total Semua Site'
+    : level === 1 ? `Plan Deploy: ${node.name}`
+    : `${node.name} (Plan Deploy: ${parentPlan})`;
+  let html = `<li><div class="${cls}" data-plan="${escAttr(dataPlan)}" data-group="${escAttr(dataGroup)}" data-label="${escAttr(modalLabel)}">
+      ${label ? `<div class="tn-label">${label}</div>` : ''}
+      <div class="tn-name">${node.name}</div>
+      <div class="tn-value">${node.count.toLocaleString()}</div>
+    </div>`;
   if (node.children && node.children.length) {
-    html += `<ul class="tree-list">` +
-      node.children.map(c => `<li>${renderTreeNode(c, false)}</li>`).join('') +
-      `</ul>`;
+    html += `<ul>` + node.children.map(c => renderTreeNode(c, level + 1, level === 1 ? node.name : parentPlan)).join('') + `</ul>`;
   }
+  html += `</li>`;
   return html;
 }
 
@@ -712,10 +795,55 @@ async function loadTree() {
       return;
     }
     const rootNode = { name: 'Total', count: d.total, children: d.children };
-    el.innerHTML = `<ul class="tree-list"><li>${renderTreeNode(rootNode, true)}</li></ul>`;
+    el.innerHTML = `<div class="tree"><ul>${renderTreeNode(rootNode, 0, null)}</ul></div>`;
+    el.querySelectorAll('.tree-node').forEach(node => {
+      node.addEventListener('click', () => {
+        openTreeDetail(node.dataset.plan || '', node.dataset.group || '', node.dataset.label || '');
+      });
+    });
   } catch (e) {
     el.innerHTML = '<div class="error-msg">❌ Gagal memuat diagram.</div>';
   }
+}
+
+async function openTreeDetail(plan, group, label) {
+  document.getElementById('modalTitle').textContent = label;
+  document.getElementById('modalBody').innerHTML = '<div class="loading"><span class="pulse"></span> Memuat...</div>';
+  document.getElementById('treeModal').classList.add('active');
+  const params = new URLSearchParams();
+  if (plan) params.set('plan', plan);
+  if (group) params.set('group', group);
+  try {
+    const r = await fetch('/api/tree_list?' + params.toString());
+    const d = await r.json();
+    if (d.error) {
+      document.getElementById('modalBody').innerHTML = `<div class="error-msg">❌ ${d.error}</div>`;
+      return;
+    }
+    if (!d.rows.length) {
+      document.getElementById('modalBody').innerHTML = '<div class="loading">Tidak ada data.</div>';
+      return;
+    }
+    const info = d.total > d.rows.length
+      ? `Menampilkan ${d.rows.length} dari ${d.total.toLocaleString()} data`
+      : `${d.total.toLocaleString()} data`;
+    document.getElementById('modalBody').innerHTML = `
+      <p style="color:var(--text2);font-size:12px;margin-bottom:.75rem;">${info}</p>
+      <table class="data-table"><thead><tr><th>Site ID</th><th>Site Name</th><th>Witel</th><th>Status</th></tr></thead>
+      <tbody>` + d.rows.map(row => `
+        <tr>
+          <td onclick="closeTreeModal();searchSite('${row.site_id}')">${row.site_id}</td>
+          <td>${row.site_name}</td>
+          <td style="color:var(--text2);">${row.witel}</td>
+          <td>${statusBadge(row.status)}</td>
+        </tr>`).join('') + `</tbody></table>`;
+  } catch (e) {
+    document.getElementById('modalBody').innerHTML = '<div class="error-msg">❌ Gagal memuat data.</div>';
+  }
+}
+
+function closeTreeModal() {
+  document.getElementById('treeModal').classList.remove('active');
 }
 
 let tableTimeout;
