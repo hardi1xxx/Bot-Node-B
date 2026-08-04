@@ -749,15 +749,6 @@ async function refreshEditAccess() {
   }
 }
 
-async function ensureTelegramId() {
-  if (!telegramUserId) {
-    const userId = prompt('Masukkan ID Telegram Anda untuk mengakses fitur edit (kosongkan kalau hanya ingin monitoring):', '');
-    telegramUserId = (userId || '').trim();
-    localStorage.setItem('telegram_user_id', telegramUserId);
-    await refreshEditAccess();
-  }
-}
-
 function changeTelegramId() {
   const userId = prompt('Masukkan ID Telegram Anda:', telegramUserId || '');
   if (userId === null) return;
@@ -795,7 +786,6 @@ async function doSearch() {
   const q = document.getElementById('searchInput').value.trim();
   if (!q) return;
   const el = document.getElementById('searchResult');
-  await ensureTelegramId();
   el.innerHTML = '<div class="loading"><span class="pulse"></span> Mencari...</div>';
   try {
     const r = await fetch('/api/search?q=' + encodeURIComponent(q) + '&telegram_user_id=' + encodeURIComponent(telegramUserId));
