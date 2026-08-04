@@ -36,10 +36,7 @@ def load_allowed_telegram_ids(path=None):
                 line = raw_line.strip()
                 if not line or line.startswith("#"):
                     continue
-                try:
-                    ids.append(int(line))
-                except ValueError:
-                    print(f"⚠️ ID Telegram tidak valid di {file_path}: {line}")
+                ids.append(line.upper())
             return ids
     except Exception as e:
         print(f"⚠️ Gagal membaca daftar ID Telegram dari {file_path}: {e}")
@@ -47,9 +44,8 @@ def load_allowed_telegram_ids(path=None):
 
 
 def is_telegram_user_allowed(user_id, path=None):
-    try:
-        normalized_id = int(str(user_id).strip())
-    except (TypeError, ValueError):
+    normalized_id = str(user_id).strip().upper()
+    if not normalized_id:
         return False
     return normalized_id in load_allowed_telegram_ids(path)
 
