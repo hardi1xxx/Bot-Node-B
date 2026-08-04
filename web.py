@@ -646,6 +646,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
     <button class="nav-tab" onclick="showPage('dashboard')">📊 Dashboard</button>
     <button class="nav-tab" onclick="showPage('table')">📋 Semua Data</button>
   </div>
+  <button id="telegramIdBtn" onclick="changeTelegramId()" style="background:transparent;border:1px solid var(--border2);color:var(--text2);border-radius:var(--radius-sm);padding:6px 12px;font-size:12px;cursor:pointer;white-space:nowrap;">🔑 ID Telegram</button>
 </nav>
 
 <!-- SEARCH PAGE -->
@@ -734,7 +735,42 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-h
 let currentPage = 1;
 let dashboardLoaded = false;
 let tableLoaded = false;
-let telegramUserId = '';
+let telegramUserId = localStorage.getItem('telegram_user_id') || '';
+let editAllowed = false;
+
+async function refreshEditAccess() {
+  if (!telegramUserId) { editAllowed = false; return; }
+  try {
+    const r = await fetch('/api/check_edit_access?telegram_user_id=' + encodeURIComponent(telegramUserId));
+    const d = await r.json();
+    editAllowed = !!d.allowed;
+  } catch (e) {
+    editAllowed = false;
+  }
+}
+
+async function ensureTelegramId() {
+  if (!telegramUserId) {
+    const userId = prompt('Masukkan ID Telegram Anda untuk mengakses fitur edit (kosongkan kalau hanya ingin monitoring):', '');
+    telegramUserId = (userId || '').trim();
+    localStorage.setItem('telegram_user_id', telegramUserId);
+    await refreshEditAccess();
+  }
+}
+
+function changeTelegramId() {
+  const userId = prompt('Masukkan ID Telegram Anda:', telegramUserId || '');
+  if (userId === null) return;
+  telegramUserId = userId.trim();
+  localStorage.setItem('telegram_user_id', telegramUserId);
+  refreshEditAccess().then(() => {
+    if (document.getElementById('page-dashboard').classList.contains('active')) { loadDashboard(); loadTree(); }
+    const searchEl = document.getElementById('searchResult');
+    if (searchEl && searchEl.innerHTML.trim()) doSearch();
+  });
+}
+
+refreshEditAccess();
 
 function showPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -759,13 +795,7 @@ async function doSearch() {
   const q = document.getElementById('searchInput').value.trim();
   if (!q) return;
   const el = document.getElementById('searchResult');
-  const userId = prompt('Masukkan ID Telegram Anda untuk mengakses fitur edit:', telegramUserId || '');
-  if (userId !== null) {
-    telegramUserId = userId.trim();
-  }
-  if (!telegramUserId) {
-    telegramUserId = '';
-  }
+  await ensureTelegramId();
   el.innerHTML = '<div class="loading"><span class="pulse"></span> Mencari...</div>';
   try {
     const r = await fetch('/api/search?q=' + encodeURIComponent(q) + '&telegram_user_id=' + encodeURIComponent(telegramUserId));
@@ -883,7 +913,7 @@ async function loadDashboard() {
         <td style="cursor:pointer;color:var(--accent);" onclick="searchSite('${row.site_id}')">${row.site_id}</td>
         <td style="color:var(--text2);">${row.witel}</td>
         <td>${statusBadge(row.status)}</td>
-        <td>${telegramUserId ? `<button class="edit-btn" onclick="openDashboardEdit('${escAttr(row.site_id)}')">✏️ Edit</button>` : '<span style="color:var(--text3);">Monitor only</span>'}</td>
+        <td>${editAllowed ? `<button class="edit-btn" onclick="openDashboardEdit('${escAttr(row.site_id)}')">✏️ Edit</button>` : '<span style="color:var(--text3);">Monitor only</span>'}</td>
       </tr>`).join('');
   } catch(e) {
     document.getElementById('dashLastUpdate').textContent = 'Gagal memuat data.';
@@ -1006,7 +1036,7 @@ async function openTreeDetail(plan, group, label) {
           <td>${row.site_name}</td>
           <td style="color:var(--text2);">${row.witel}</td>
           <td>${statusBadge(row.status)}</td>
-          <td>${telegramUserId ? `<button class="edit-btn" onclick="openTreeEdit('${escAttr(row.site_id)}')">✏️ Edit</button>` : '<span style="color:var(--text3);">Monitor only</span>'}</td>
+          <td>${editAllowed ? `<button class="edit-btn" onclick="openTreeEdit('${escAttr(row.site_id)}')">✏️ Edit</button>` : '<span style="color:var(--text3);">Monitor only</span>'}</td>
         </tr>`).join('') + `</tbody></table>`;
   } catch (e) {
     document.getElementById('modalBody').innerHTML = '<div class="error-msg">❌ Gagal memuat data.</div>';
@@ -1025,7 +1055,7 @@ async function openTreeEdit(siteCode) {
   document.getElementById('modalTitle').textContent = `Edit: ${siteCode}`;
   document.getElementById('modalBody').innerHTML = '<div class="loading"><span class="pulse"></span> Memuat data site...</div>';
   try {
-    const r = await fetch('/api/search?q=' + encodeURIComponent(siteCode));
+    const r = await fetch('/api/search?q=' + encodeURIComponent(siteCode) + '&telegram_user_id=' + encodeURIComponent(telegramUserId));
     const d = await r.json();
     if (!d.found) {
       document.getElementById('modalBody').innerHTML = `
@@ -1034,6 +1064,18 @@ async function openTreeEdit(siteCode) {
       return;
     }
     const data = d.data;
+    if (!d.edit_allowed) {
+      document.getElementById('modalBody').innerHTML = `
+        <button class="back-btn" onclick="backToTreeList()">← Kembali ke daftar</button>
+        <div class="result-grid">
+          <div class="result-field"><div class="field-label">Site</div><div class="field-value">${data.site_id}</div></div>
+          <div class="result-field"><div class="field-label">Sub Sistem</div><div class="field-value">${data.sub_sistem}</div></div>
+          <div class="result-field"><div class="field-label">Witel</div><div class="field-value">${data.witel}</div></div>
+          <div class="result-field"><div class="field-label">Status Pekerjaan</div><div class="field-value">${data.status}</div></div>
+        </div>
+        <div class="update-form"><div class="update-form-title">Mode Monitoring</div><div class="hint">Anda hanya dapat melihat data. Edit dibatasi untuk user Telegram tertentu yang terdaftar.</div></div>`;
+      return;
+    }
     document.getElementById('modalBody').innerHTML = `
       <button class="back-btn" onclick="backToTreeList()">← Kembali ke daftar</button>
       <div class="result-grid">
